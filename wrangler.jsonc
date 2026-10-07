@@ -8,5 +8,8 @@
     "directory": "./dist",
     // Client-side routes (/entrar, /convite/ABC123) fall back to index.html.
     "not_found_handling": "single-page-application"
-  }
+  },
+  // Branch builds publish a Preview (npx wrangler preview), which requires
+  // this block. Empty means previews inherit the settings above.
+  "previews": {}
 }
