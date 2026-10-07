@@ -3,7 +3,8 @@ import { Navigate, useLocation } from 'react-router'
 import { useAuth } from '../auth/context'
 import { supabase } from '../lib/supabase'
 
-// Passwordless login: Google or a 6-digit code sent by email. The code is
+// Passwordless login: Google or a numeric code sent by email (6 to 10 digits,
+// set per project in Supabase under Auth > Providers > Email). The code is
 // typed inside the app because on iPhone an email link would open in Safari,
 // not in the installed PWA.
 export default function Login() {
@@ -65,17 +66,17 @@ export default function Login() {
         </form>
       ) : (
         <form onSubmit={verifyCode}>
-          <p>Enviamos um código de 6 dígitos para {email}.</p>
+          <p>Enviamos um código para {email}.</p>
           <label>
             Código
             <input
               inputMode="numeric"
               autoComplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxLength={6}
+              pattern="[0-9]{6,10}"
+              maxLength={10}
               required
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
             />
           </label>
           <button type="submit" disabled={busy}>Entrar</button>
