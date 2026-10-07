@@ -1,5 +1,5 @@
--- Simula o que o Supabase já traz pronto (schema auth, papéis e auth.uid()),
--- para testar as migrations num Postgres comum. Não roda no Supabase.
+-- Stubs what Supabase provides out of the box (auth schema, roles and
+-- auth.uid()), so the migrations can be tested on plain Postgres. Not run on Supabase.
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon nologin; end if;
   if not exists (select 1 from pg_roles where rolname = 'authenticated') then create role authenticated nologin; end if;

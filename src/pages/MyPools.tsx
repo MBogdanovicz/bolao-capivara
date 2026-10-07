@@ -8,7 +8,7 @@ export default function MyPools() {
   const [pools, setPools] = useState<PoolRow[] | null>(null)
 
   useEffect(() => {
-    // A RLS só devolve os bolões de que o usuário participa.
+    // RLS only returns the pools the user is a member of.
     supabase
       .from('pools')
       .select('id, name')

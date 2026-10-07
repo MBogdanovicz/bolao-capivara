@@ -1,16 +1,16 @@
--- Suporte ao job de sincronização com a football-data.org.
+-- Support for the football-data.org sync job.
 
--- Quando foi a última sincronização completa (uma linha só).
+-- When the last full sync happened (single row).
 create table public.sync_state (
   id           integer primary key default 1 check (id = 1),
   last_sync_at timestamptz
 );
 insert into public.sync_state (id) values (1);
-alter table public.sync_state enable row level security; -- sem políticas: só a service role acessa
+alter table public.sync_state enable row level security; -- no policies: service role only
 
--- Vale a pena chamar a API agora? Sim se nunca sincronizou, se a última vez
--- foi há mais de 6 horas, ou se há jogo que começou nas últimas 3 horas (ou
--- começa nos próximos 10 minutos) e ainda não foi encerrado.
+-- Is it worth calling the API now? Yes if it never synced, if the last sync
+-- was more than 6 hours ago, or if a match started in the last 3 hours (or
+-- starts in the next 10 minutes) and has not finished yet.
 create function public.sync_due()
 returns boolean
 language sql stable security definer set search_path = ''
@@ -26,8 +26,8 @@ $$;
 
 revoke execute on function public.sync_due() from public, anon, authenticated;
 
--- O job regrava todos os jogos a cada execução. Os triggers só devem agir
--- quando algo mudou de verdade, para não recalcular pontos à toa.
+-- The job rewrites every match on each run. The triggers should only act when
+-- something actually changed, so points are not recomputed for nothing.
 drop trigger matches_touch on public.matches;
 create trigger matches_touch before update on public.matches
   for each row when (old.* is distinct from new.*)
