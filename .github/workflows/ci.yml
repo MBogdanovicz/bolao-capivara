@@ -16,6 +16,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      - name: Testes da Edge Function
+        run: node --test 'supabase/functions/**/*.test.ts'
       - run: npm run build
         env:
           VITE_SUPABASE_URL: https://exemplo.supabase.co
