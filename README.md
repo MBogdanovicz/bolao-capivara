@@ -48,7 +48,7 @@ plus lint, the Edge Function tests and the build, on every PR.
 
 ```bash
 DATABASE_URL=postgres://user:password@localhost:5432/db supabase/tests/run.sh
-node --test 'supabase/functions/**/*.test.ts'
+node --test 'src/**/*.test.ts' 'supabase/functions/**/*.test.ts'
 ```
 
 ## Service setup (once)

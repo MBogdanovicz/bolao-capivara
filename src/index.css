@@ -70,3 +70,68 @@ button.link { background: none; color: var(--green); width: auto; padding: 8px 0
 
 .list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .list a { display: block; padding: 16px; border-radius: 8px; background: var(--surface); color: var(--text); text-decoration: none; }
+
+h1 { margin: 8px 0 4px; }
+h3 { margin: 0; font-size: 1.05rem; }
+a { color: var(--green); }
+.hint { color: var(--muted); font-size: 0.9rem; }
+.center-text { text-align: center; }
+small { display: block; color: var(--muted); font-weight: 400; font-size: 0.85rem; }
+
+select {
+  font: inherit;
+  font-size: 16px;
+  padding: 12px;
+  border: 1px solid var(--muted);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+fieldset { border: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 10px; }
+legend { font-weight: 700; font-size: 1.1rem; margin-bottom: 4px; }
+label.row { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
+input.points { width: 80px; text-align: center; }
+label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.card { background: var(--surface); border-radius: 12px; padding: 16px; margin: 12px 0; display: flex; flex-direction: column; gap: 10px; }
+.card p { margin: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+button.chip { width: auto; padding: 8px 12px; background: var(--surface); color: var(--text); border: 1px solid var(--muted); border-radius: 999px; font-weight: 500; }
+button.danger, .danger { color: var(--danger); }
+.invite { word-break: break-all; font-family: ui-monospace, monospace; }
+.checks { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow-y: auto; }
+
+.tabs { display: flex; gap: 4px; margin: 16px 0; border-bottom: 1px solid var(--surface); }
+.tabs a { flex: 1; text-align: center; padding: 10px; color: var(--muted); text-decoration: none; font-weight: 600; border-bottom: 3px solid transparent; }
+.tabs a.active { color: var(--green); border-bottom-color: var(--green); }
+
+.stepper { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stepper button { width: 48px; }
+
+.matches { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.match { background: var(--surface); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.match-meta { display: flex; gap: 8px; color: var(--muted); font-size: 0.85rem; text-transform: capitalize; }
+.live { color: var(--danger); font-weight: 700; text-transform: none; }
+.match-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.team { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; font-weight: 600; font-size: 0.95rem; text-align: center; overflow-wrap: anywhere; }
+.crest { width: 28px; height: 28px; object-fit: contain; flex-shrink: 0; display: inline-block; }
+.score { font-size: 1.3rem; font-weight: 700; min-width: 64px; text-align: center; }
+.score-inputs { display: flex; align-items: center; gap: 6px; }
+.score-inputs input { width: 48px; text-align: center; padding: 10px 4px; }
+.knockout { display: flex; flex-direction: column; gap: 8px; }
+.match-foot { display: flex; flex-direction: column; gap: 4px; font-size: 0.95rem; }
+.points-badge { margin-left: 8px; color: var(--green); }
+.others { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 4px; }
+.others li { display: flex; justify-content: space-between; gap: 8px; font-size: 0.9rem; }
+
+.sticky-save { position: sticky; bottom: 0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: var(--bg); }
+
+.ranking { width: 100%; border-collapse: collapse; }
+.ranking th, .ranking td { padding: 10px 6px; text-align: center; border-bottom: 1px solid var(--surface); }
+.ranking th { color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+.ranking .name { text-align: left; }
+.ranking td.name { display: flex; align-items: center; gap: 8px; }
+.ranking tr.me { background: var(--surface); }
+.avatar { width: 24px; height: 24px; border-radius: 50%; }
