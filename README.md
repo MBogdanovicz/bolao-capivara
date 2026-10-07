@@ -12,7 +12,8 @@ the [definition document](https://claude.ai/code/artifact/01772291-b6e7-4603-beb
 | Piece | Service (free plan) |
 | --- | --- |
 | App | React + Vite + TypeScript, `vite-plugin-pwa` |
-| Hosting | Cloudflare Pages, at `bolao.capivaraec.com` |
+| Hosting | Cloudflare Workers (static assets), at `bolao.capivaraec.com` |
+| Login emails | Resend (SMTP) |
 | Database, login and server | Supabase (Postgres, Auth, `pg_cron`, Edge Functions) |
 | Fixtures and results | football-data.org |
 
@@ -54,17 +55,40 @@ node --test 'supabase/functions/**/*.test.ts'
 
 1. **Supabase:** create the project and run each file in `supabase/migrations/`,
    in order, in the SQL Editor. When a new PR adds a migration, run only the new one.
-2. **Login with a code:** in Authentication > Emails, edit the *Magic Link*
-   template to show the code `{{ .Token }}` instead of the link. In
-   Authentication > URL Configuration, set the Site URL to `https://bolao.capivaraec.com`.
+2. **Login with a code:** Supabase only lets you edit the email templates after
+   you set up your own SMTP server. Resend's free plan (100 emails a day) is enough:
+   1. In Resend, add the domain `capivaraec.com` and create the DNS records it
+      shows in GoDaddy (or in Cloudflare, if the domain's DNS is there). Wait until
+      the domain shows as verified.
+   2. In Resend, create an API key with permission to send emails.
+   3. In Supabase, under Authentication > Emails > SMTP Settings, enable custom
+      SMTP with host `smtp.resend.com`, port `465`, username `resend`, the API key
+      as the password, sender email `nao-responda@capivaraec.com` and sender name
+      `Bolão Capivara`.
+   4. Under Authentication > Emails > Templates, edit both *Magic Link* (used for
+      returning users) and *Confirm signup* (used the first time). Set the subject
+      to `Seu código do Bolão Capivara` and make the body show the code:
+      ```html
+      <h2>Bolão Capivara</h2>
+      <p>Seu código de acesso é:</p>
+      <p style="font-size:32px;font-weight:bold;letter-spacing:6px">{{ .Token }}</p>
+      <p>Ele vale por 1 hora. Se não foi você, ignore este e-mail.</p>
+      ```
+   5. Under Authentication > URL Configuration, set the Site URL to
+      `https://bolao.capivaraec.com`.
 3. **Login with Google:** create an OAuth Client in Google Cloud (free) and
    enable the Google provider in Supabase, under Authentication > Providers.
-4. **Cloudflare Pages:** connect this repository, with build command
-   `npm run build`, output folder `dist`, and the variables `VITE_SUPABASE_URL`
-   and `VITE_SUPABASE_ANON_KEY`.
-5. **Domain:** in GoDaddy, create a CNAME record `bolao` pointing to the
-   project's `*.pages.dev` address, and add the domain under Custom domains in
-   Cloudflare Pages.
+4. **Cloudflare Worker:** connect this repository to a Worker named
+   `bolao-capivara` (the name must match `wrangler.jsonc`). Under Settings > Build:
+   - Build command: `npm run build`
+   - Deploy command: `npx wrangler deploy`
+   - Variables and secrets (build variables, not runtime ones): `VITE_SUPABASE_URL`
+     and `VITE_SUPABASE_ANON_KEY`. Vite bakes them into the app during the build.
+5. **Domain:** a Worker custom domain needs the domain's DNS to be managed by
+   Cloudflare. Add `capivaraec.com` to Cloudflare (free plan), check that it
+   imported the existing records, and change the nameservers in GoDaddy to the two
+   Cloudflare shows. Then, in the Worker, add `bolao.capivaraec.com` under
+   Settings > Domains & Routes > Custom domain.
 
 ## Match sync
 

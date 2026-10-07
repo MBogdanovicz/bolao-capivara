@@ -1,0 +1,12 @@
+// Cloudflare Workers config: serves the built PWA as static assets.
+// The name must match the Worker created in the Cloudflare dashboard.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "bolao-capivara",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./dist",
+    // Client-side routes (/entrar, /convite/ABC123) fall back to index.html.
+    "not_found_handling": "single-page-application"
+  }
+}
