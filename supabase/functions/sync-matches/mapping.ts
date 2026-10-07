@@ -1,5 +1,5 @@
-// Conversão dos dados da football-data.org (API v4) para as linhas do banco.
-// Sem dependências, para rodar igual no Deno (Edge Function) e no Node (testes).
+// Converts football-data.org (API v4) data into database rows.
+// No dependencies, so it runs the same on Deno (Edge Function) and Node (tests).
 
 export type ApiTeam = {
   id: number | null
@@ -23,8 +23,8 @@ export type ApiMatch = {
     winner: 'HOME_TEAM' | 'AWAY_TEAM' | 'DRAW' | null
     duration: string
     fullTime: ApiScorePair
-    // Presentes em jogos com prorrogação (formato não documentado na página
-    // de match da v4, por isso tudo opcional).
+    // Present in matches with extra time (not documented on the v4 match
+    // page, hence optional).
     regularTime?: ApiScorePair | null
     penalties?: ApiScorePair | null
   }
@@ -59,7 +59,7 @@ const STATUS: Record<string, MatchStatus> = {
   CANCELLED: 'cancelled',
 }
 
-// Fases sem "quem avança" (pontos corridos e grupos).
+// Stages with no "advancing team" (league and group stages).
 const NON_KNOCKOUT_STAGES = new Set([
   'REGULAR_SEASON', 'GROUP_STAGE', 'CLAUSURA', 'APERTURA', 'CHAMPIONSHIP_ROUND', 'RELEGATION_ROUND',
 ])
@@ -75,8 +75,8 @@ export type MatchResult = {
   advancing_side: 'HOME' | 'AWAY' | null
 }
 
-// O palpite vale para o tempo regular, então usa regularTime quando o jogo
-// teve prorrogação; senão, fullTime.
+// Predictions are scored against regular time, so use regularTime when the
+// match had extra time; otherwise fullTime.
 export function matchResult(match: ApiMatch): MatchResult {
   const regular = match.score.regularTime ?? match.score.fullTime
   const finished = mapStatus(match.status) === 'finished'

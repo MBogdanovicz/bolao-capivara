@@ -3,9 +3,9 @@ import { Navigate, useLocation } from 'react-router'
 import { useAuth } from '../auth/context'
 import { supabase } from '../lib/supabase'
 
-// Login sem senha: Google ou código de 6 dígitos por e-mail. O código é
-// digitado dentro do app porque, no iPhone, um link de e-mail abriria no
-// Safari e não na PWA instalada.
+// Passwordless login: Google or a 6-digit code sent by email. The code is
+// typed inside the app because on iPhone an email link would open in Safari,
+// not in the installed PWA.
 export default function Login() {
   const { session } = useAuth()
   const location = useLocation()

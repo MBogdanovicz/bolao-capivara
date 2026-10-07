@@ -10,14 +10,14 @@ function match(overrides: Omit<Partial<ApiMatch>, 'score'> & { score?: Partial<A
     status: 'FINISHED',
     matchday: 29,
     stage: 'REGULAR_SEASON',
-    homeTeam: { id: 10, name: 'Time A', tla: 'TMA' },
-    awayTeam: { id: 20, name: 'Time B', tla: 'TMB' },
+    homeTeam: { id: 10, name: 'Team A', tla: 'TMA' },
+    awayTeam: { id: 20, name: 'Team B', tla: 'TMB' },
     ...rest,
     score: { winner: 'HOME_TEAM', duration: 'REGULAR', fullTime: { home: 2, away: 1 }, ...score },
   }
 }
 
-test('status da API viram os status do banco', () => {
+test('API statuses map to database statuses', () => {
   assert.equal(mapStatus('TIMED'), 'scheduled')
   assert.equal(mapStatus('IN_PLAY'), 'in_play')
   assert.equal(mapStatus('AWARDED'), 'finished')
@@ -25,19 +25,19 @@ test('status da API viram os status do banco', () => {
   assert.equal(mapStatus('ALGO_NOVO'), 'scheduled')
 })
 
-test('jogo de pontos corridos usa o placar final e não tem mata-mata', () => {
+test('league match uses the full-time score and has no knockout data', () => {
   assert.deepEqual(matchResult(match()), {
     home_score: 2, away_score: 1, went_to_penalties: null, advancing_side: null,
   })
 })
 
-test('jogo agendado ainda sem placar', () => {
+test('scheduled match has no score yet', () => {
   const r = matchResult(match({ status: 'TIMED', score: { winner: null, fullTime: { home: null, away: null } } }))
   assert.equal(r.home_score, null)
   assert.equal(r.away_score, null)
 })
 
-test('mata-mata nos pênaltis usa o placar do tempo regular e marca quem avançou', () => {
+test('knockout on penalties uses the regular-time score and marks who went through', () => {
   const r = matchResult(match({
     stage: 'FINAL',
     score: {
@@ -51,18 +51,18 @@ test('mata-mata nos pênaltis usa o placar do tempo regular e marca quem avanço
   assert.deepEqual(r, { home_score: 1, away_score: 1, went_to_penalties: true, advancing_side: 'AWAY' })
 })
 
-test('mata-mata decidido no tempo normal', () => {
+test('knockout decided in regular time', () => {
   const r = matchResult(match({ stage: 'QUARTER_FINALS' }))
   assert.deepEqual(r, { home_score: 2, away_score: 1, went_to_penalties: false, advancing_side: 'HOME' })
 })
 
-test('temporada vem do filtro da resposta ou da data do primeiro jogo', () => {
+test('season comes from the response filter or the first match date', () => {
   const competition = { id: 2013, name: 'Brasileirão', code: 'BSA', type: 'LEAGUE' }
   assert.equal(seasonOf({ competition, filters: { season: '2026' }, matches: [] }), 2026)
   assert.equal(seasonOf({ competition, filters: {}, matches: [match()] }), 2026)
 })
 
-test('times sem definição (mata-mata futuro) ficam de fora', () => {
-  const teams = teamsOf([match(), match({ homeTeam: { id: null, name: null }, awayTeam: { id: 10, name: 'Time A' } })])
+test('undecided teams (future knockout) are left out', () => {
+  const teams = teamsOf([match(), match({ homeTeam: { id: null, name: null }, awayTeam: { id: 10, name: 'Team A' } })])
   assert.deepEqual(teams.map((t) => t.id).sort(), [10, 20])
 })

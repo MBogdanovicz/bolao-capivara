@@ -16,14 +16,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - name: Testes da Edge Function
+      - name: Edge Function tests
         run: node --test 'supabase/functions/**/*.test.ts'
       - run: npm run build
         env:
-          VITE_SUPABASE_URL: https://exemplo.supabase.co
-          VITE_SUPABASE_ANON_KEY: chave-de-exemplo
+          VITE_SUPABASE_URL: https://example.supabase.co
+          VITE_SUPABASE_ANON_KEY: example-key
 
-  banco:
+  database:
     runs-on: ubuntu-latest
     services:
       postgres:

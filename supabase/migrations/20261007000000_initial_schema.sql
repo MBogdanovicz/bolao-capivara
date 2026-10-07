@@ -1,15 +1,15 @@
--- Esquema inicial do Bolão Capivara.
--- Tabelas espelhadas da football-data.org (competitions, teams, matches),
--- tabelas do bolão, segurança por linha (RLS), cálculo de pontos e ranking.
+-- Initial schema for Bolão Capivara.
+-- Tables mirrored from football-data.org (competitions, teams, matches),
+-- pool tables, row level security (RLS), scoring and ranking.
 
 -- ---------------------------------------------------------------------------
--- Dados de futebol (escritos só pelo job de sincronização, com a service role)
+-- Football data (written only by the sync job, with the service role)
 -- ---------------------------------------------------------------------------
 
 create table public.competitions (
   id             bigint generated always as identity primary key,
   api_id         integer not null unique,
-  code           text not null unique,          -- ex.: 'BSA', 'WC'
+  code           text not null unique,          -- e.g. 'BSA', 'WC'
   name           text not null,
   type           text not null default 'LEAGUE', -- LEAGUE, CUP, LEAGUE_CUP
   current_season integer,
@@ -35,15 +35,15 @@ create table public.matches (
   competition_id    bigint not null references public.competitions (id),
   season            integer not null,
   matchday          integer,
-  stage             text not null default 'REGULAR_SEASON', -- ex.: GROUP_STAGE, FINAL
+  stage             text not null default 'REGULAR_SEASON', -- e.g. GROUP_STAGE, FINAL
   home_team_id      bigint references public.teams (id),
   away_team_id      bigint references public.teams (id),
   kickoff_at        timestamptz not null,
   status            public.match_status not null default 'scheduled',
-  -- Placar do tempo regular (90 minutos), que é o que vale para o palpite.
+  -- Regular time (90 minutes) score, which is what predictions are scored against.
   home_score        integer check (home_score >= 0),
   away_score        integer check (away_score >= 0),
-  -- Só no mata-mata: quem avançou e se foi decidido nos pênaltis.
+  -- Knockout only: who went through and whether it was decided on penalties.
   advancing_team_id bigint references public.teams (id),
   went_to_penalties boolean,
   updated_at        timestamptz not null default now()
@@ -52,7 +52,7 @@ create table public.matches (
 create index matches_competition_season_idx on public.matches (competition_id, season, kickoff_at);
 
 -- ---------------------------------------------------------------------------
--- Bolão
+-- Pools
 -- ---------------------------------------------------------------------------
 
 create table public.profiles (
@@ -69,10 +69,10 @@ create table public.pools (
   season         integer not null,
   owner_id       uuid not null references public.profiles (id),
   invite_code    text not null unique default upper(substr(md5(gen_random_uuid()::text), 1, 6)),
-  -- Lista de regras definida pelo dono na criação. Exemplo:
-  -- [{"tipo":"placar_exato","pontos":10},{"tipo":"vencedor","pontos":5},
-  --  {"tipo":"gols_um_time","pontos":2},{"tipo":"classificado","pontos":4},
-  --  {"tipo":"penaltis","pontos":3},{"tipo":"peso_fase","fases":{"FINAL":2}}]
+  -- Rules chosen by the owner when creating the pool. Example:
+  -- [{"type":"exact_score","points":10},{"type":"winner","points":5},
+  --  {"type":"one_team_goals","points":2},{"type":"advancing_team","points":4},
+  --  {"type":"penalties","points":3},{"type":"stage_weight","stages":{"FINAL":2}}]
   scoring_rules  jsonb not null check (jsonb_typeof(scoring_rules) = 'array'),
   first_matchday integer,
   created_at     timestamptz not null default now()
@@ -111,14 +111,14 @@ create table public.prediction_scores (
   computed_at   timestamptz not null default now()
 );
 
--- Palpites especiais (campeão, rebaixados, G4, artilheiro, pergunta livre).
+-- Bonus questions (champion, relegated teams, top N, top scorer, free question).
 create table public.pool_questions (
   id              bigint generated always as identity primary key,
   pool_id         uuid not null references public.pools (id) on delete cascade,
   kind            text not null check (kind in ('champion', 'relegated', 'top_n', 'top_scorer', 'free')),
   prompt          text not null,
   answer_count    integer not null default 1 check (answer_count between 1 and 20),
-  points          integer not null check (points >= 0), -- por item acertado
+  points          integer not null check (points >= 0), -- per correct item
   closes_at       timestamptz not null,
   official_answer jsonb check (official_answer is null or jsonb_typeof(official_answer) = 'array'),
   created_at      timestamptz not null default now()
@@ -134,10 +134,10 @@ create table public.question_answers (
 );
 
 -- ---------------------------------------------------------------------------
--- Funções auxiliares
+-- Helper functions
 -- ---------------------------------------------------------------------------
 
--- security definer evita recursão das políticas de pool_members.
+-- security definer avoids recursion in the pool_members policies.
 create function public.is_pool_member(p_pool_id uuid)
 returns boolean
 language sql stable security definer set search_path = ''
@@ -158,9 +158,9 @@ as $$
   );
 $$;
 
--- Calcula os pontos de um palpite. O placar exato vale sozinho entre as regras
--- de placar; fora dele, vencedor e gols de um time se somam. As regras de
--- mata-mata (classificado, pênaltis) somam por cima, e o peso da fase multiplica.
+-- Scores one prediction. Among the score rules, an exact score counts on its
+-- own; otherwise winner and one-team-goals add up. Knockout rules (advancing
+-- team, penalties) add on top, and the stage weight multiplies the total.
 create function public.score_prediction(
   rules        jsonb,
   stage        text,
@@ -182,36 +182,36 @@ begin
   rules_hit := '{}';
 
   for rule in select * from jsonb_array_elements(rules) loop
-    case rule->>'tipo'
-      when 'placar_exato' then
+    case rule->>'type'
+      when 'exact_score' then
         if exact then
-          points := points + (rule->>'pontos')::int;
-          rules_hit := rules_hit || 'placar_exato'::text;
+          points := points + (rule->>'points')::int;
+          rules_hit := rules_hit || 'exact_score'::text;
         end if;
-      when 'vencedor' then
+      when 'winner' then
         if not exact and sign(pred_home - pred_away) = sign(real_home - real_away) then
-          points := points + (rule->>'pontos')::int;
-          rules_hit := rules_hit || 'vencedor'::text;
+          points := points + (rule->>'points')::int;
+          rules_hit := rules_hit || 'winner'::text;
         end if;
-      when 'gols_um_time' then
+      when 'one_team_goals' then
         if not exact and (pred_home = real_home or pred_away = real_away) then
-          points := points + (rule->>'pontos')::int;
-          rules_hit := rules_hit || 'gols_um_time'::text;
+          points := points + (rule->>'points')::int;
+          rules_hit := rules_hit || 'one_team_goals'::text;
         end if;
-      when 'classificado' then
+      when 'advancing_team' then
         if real_adv is not null and pred_adv = real_adv then
-          points := points + (rule->>'pontos')::int;
-          rules_hit := rules_hit || 'classificado'::text;
+          points := points + (rule->>'points')::int;
+          rules_hit := rules_hit || 'advancing_team'::text;
         end if;
-      when 'penaltis' then
+      when 'penalties' then
         if real_pens is not null and pred_pens = real_pens then
-          points := points + (rule->>'pontos')::int;
-          rules_hit := rules_hit || 'penaltis'::text;
+          points := points + (rule->>'points')::int;
+          rules_hit := rules_hit || 'penalties'::text;
         end if;
-      when 'peso_fase' then
-        weight := coalesce((rule->'fases'->>stage)::numeric, 1);
+      when 'stage_weight' then
+        weight := coalesce((rule->'stages'->>stage)::numeric, 1);
       else
-        null; -- tipo desconhecido: ignorado
+        null; -- unknown rule type: ignored
     end case;
   end loop;
 
@@ -219,7 +219,7 @@ begin
 end;
 $$;
 
--- Recalcula os pontos de todos os palpites de um jogo encerrado.
+-- Recomputes the points of every prediction for a finished match.
 create function public.recompute_match_scores(p_match_id bigint)
 returns void
 language plpgsql security definer set search_path = ''
@@ -264,7 +264,7 @@ returns trigger
 language plpgsql security definer set search_path = ''
 as $$
 begin
-  -- Encerrou agora, ou a API corrigiu o placar de um jogo já encerrado.
+  -- Just finished, or the API corrected the score of a finished match.
   if new.status = 'finished' or old.status = 'finished' then
     perform public.recompute_match_scores(new.id);
   end if;
@@ -276,7 +276,7 @@ create trigger matches_score after update of status, home_score, away_score, adv
   on public.matches
   for each row execute function public.on_match_scored();
 
--- Pontos dos palpites especiais quando o dono (ou o job) grava a resposta oficial.
+-- Bonus question points, once the owner (or the job) sets the official answer.
 create function public.on_question_answered()
 returns trigger
 language plpgsql security definer set search_path = ''
@@ -298,7 +298,7 @@ $$;
 create trigger pool_questions_score after update of official_answer, points on public.pool_questions
   for each row execute function public.on_question_answered();
 
--- O dono entra automaticamente como membro ao criar o bolão.
+-- The owner joins the pool automatically when creating it.
 create function public.on_pool_created()
 returns trigger
 language plpgsql security definer set search_path = ''
@@ -313,7 +313,7 @@ $$;
 create trigger pools_add_owner after insert on public.pools
   for each row execute function public.on_pool_created();
 
--- As regras travam quando o primeiro jogo do bolão começa.
+-- Rules are locked once the pool's first match kicks off.
 create function public.on_pool_updated()
 returns trigger
 language plpgsql security definer set search_path = ''
@@ -329,7 +329,7 @@ begin
         and (old.first_matchday is null or m.matchday >= old.first_matchday)
         and m.kickoff_at <= now()
     ) then
-      raise exception 'As regras não podem mudar depois que o primeiro jogo do bolão começou';
+      raise exception 'Rules cannot change after the pool''s first match has started';
     end if;
   end if;
   return new;
@@ -339,7 +339,7 @@ $$;
 create trigger pools_lock_rules before update on public.pools
   for each row execute function public.on_pool_updated();
 
--- Perfil criado no primeiro login, com o nome do Google ou o início do e-mail.
+-- Profile created on first login, from the Google name or the email prefix.
 create function public.on_auth_user_created()
 returns trigger
 language plpgsql security definer set search_path = ''
@@ -363,7 +363,7 @@ $$;
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.on_auth_user_created();
 
--- Entrar num bolão pelo código do convite.
+-- Join a pool with its invite code.
 create function public.join_pool(p_invite_code text)
 returns uuid
 language plpgsql security definer set search_path = ''
@@ -372,12 +372,12 @@ declare
   v_pool_id uuid;
 begin
   if auth.uid() is null then
-    raise exception 'É preciso estar logado';
+    raise exception 'You must be logged in';
   end if;
 
   select id into v_pool_id from public.pools where invite_code = upper(trim(p_invite_code));
   if v_pool_id is null then
-    raise exception 'Convite inválido';
+    raise exception 'Invalid invite code';
   end if;
 
   insert into public.pool_members (pool_id, user_id)
@@ -389,16 +389,16 @@ end;
 $$;
 
 -- ---------------------------------------------------------------------------
--- Ranking (security_invoker: respeita a RLS de quem consulta)
+-- Ranking (security_invoker: applies the caller's RLS)
 -- ---------------------------------------------------------------------------
 
 create view public.pool_ranking with (security_invoker = true) as
 with match_points as (
   select p.pool_id, p.user_id,
          sum(ps.points) as points,
-         count(*) filter (where 'placar_exato' = any (ps.rules_hit)) as exact_scores,
-         count(*) filter (where 'vencedor' = any (ps.rules_hit)
-                            or 'placar_exato' = any (ps.rules_hit)) as right_winners
+         count(*) filter (where 'exact_score' = any (ps.rules_hit)) as exact_scores,
+         count(*) filter (where 'winner' = any (ps.rules_hit)
+                            or 'exact_score' = any (ps.rules_hit)) as right_winners
   from public.predictions p
   join public.prediction_scores ps on ps.prediction_id = p.id
   group by p.pool_id, p.user_id
@@ -430,7 +430,7 @@ left join match_points mp on mp.pool_id = pm.pool_id and mp.user_id = pm.user_id
 left join question_points qp on qp.pool_id = pm.pool_id and qp.user_id = pm.user_id;
 
 -- ---------------------------------------------------------------------------
--- Segurança por linha
+-- Row level security
 -- ---------------------------------------------------------------------------
 
 alter table public.competitions      enable row level security;
@@ -444,35 +444,35 @@ alter table public.prediction_scores enable row level security;
 alter table public.pool_questions    enable row level security;
 alter table public.question_answers  enable row level security;
 
--- Dados de futebol: leitura para quem está logado; escrita só pela service role.
-create policy "leitura" on public.competitions for select to authenticated using (true);
-create policy "leitura" on public.teams        for select to authenticated using (true);
-create policy "leitura" on public.matches      for select to authenticated using (true);
+-- Football data: readable by logged-in users; written only by the service role.
+create policy "read" on public.competitions for select to authenticated using (true);
+create policy "read" on public.teams        for select to authenticated using (true);
+create policy "read" on public.matches      for select to authenticated using (true);
 
--- Perfis: todos leem apelidos; cada um edita o seu.
-create policy "leitura" on public.profiles for select to authenticated using (true);
-create policy "edita o proprio" on public.profiles for update to authenticated
+-- Profiles: everyone reads nicknames; each user edits their own.
+create policy "read" on public.profiles for select to authenticated using (true);
+create policy "update own" on public.profiles for update to authenticated
   using (id = auth.uid()) with check (id = auth.uid());
 
--- Bolões: só membros veem; qualquer um cria sendo o dono; só o dono altera.
-create policy "membros leem" on public.pools for select to authenticated
+-- Pools: only members see them; anyone creates one as its owner; only the owner changes it.
+create policy "members read" on public.pools for select to authenticated
   using (public.is_pool_member(id) or owner_id = auth.uid());
-create policy "cria como dono" on public.pools for insert to authenticated
+create policy "create as owner" on public.pools for insert to authenticated
   with check (owner_id = auth.uid());
-create policy "dono altera" on public.pools for update to authenticated
+create policy "owner updates" on public.pools for update to authenticated
   using (owner_id = auth.uid()) with check (owner_id = auth.uid());
-create policy "dono apaga" on public.pools for delete to authenticated
+create policy "owner deletes" on public.pools for delete to authenticated
   using (owner_id = auth.uid());
 
--- Membros: quem está no bolão vê os outros; entrar é pela função join_pool.
-create policy "membros leem" on public.pool_members for select to authenticated
+-- Members: pool members see each other; joining goes through join_pool.
+create policy "members read" on public.pool_members for select to authenticated
   using (public.is_pool_member(pool_id));
-create policy "sai do bolao" on public.pool_members for delete to authenticated
+create policy "leave pool" on public.pool_members for delete to authenticated
   using (user_id = auth.uid() and role = 'member');
 
--- Palpites: o próprio sempre; os dos outros só depois que o jogo começa.
--- Criar, alterar e apagar só antes do início do jogo (relógio do servidor).
-create policy "leitura" on public.predictions for select to authenticated
+-- Predictions: your own always; others' only after kickoff.
+-- Create, update and delete only before kickoff (server clock).
+create policy "read" on public.predictions for select to authenticated
   using (
     user_id = auth.uid()
     or (
@@ -480,13 +480,13 @@ create policy "leitura" on public.predictions for select to authenticated
       and exists (select 1 from public.matches m where m.id = match_id and m.kickoff_at <= now())
     )
   );
-create policy "palpita antes do jogo" on public.predictions for insert to authenticated
+create policy "predict before kickoff" on public.predictions for insert to authenticated
   with check (
     user_id = auth.uid()
     and public.is_pool_member(pool_id)
     and exists (select 1 from public.matches m where m.id = match_id and m.kickoff_at > now())
   );
-create policy "altera antes do jogo" on public.predictions for update to authenticated
+create policy "update before kickoff" on public.predictions for update to authenticated
   using (
     user_id = auth.uid()
     and exists (select 1 from public.matches m where m.id = match_id and m.kickoff_at > now())
@@ -495,31 +495,31 @@ create policy "altera antes do jogo" on public.predictions for update to authent
     user_id = auth.uid()
     and exists (select 1 from public.matches m where m.id = match_id and m.kickoff_at > now())
   );
-create policy "apaga antes do jogo" on public.predictions for delete to authenticated
+create policy "delete before kickoff" on public.predictions for delete to authenticated
   using (
     user_id = auth.uid()
     and exists (select 1 from public.matches m where m.id = match_id and m.kickoff_at > now())
   );
 
--- Pontos: membros do bolão leem (só existem depois do jogo encerrado).
-create policy "membros leem" on public.prediction_scores for select to authenticated
+-- Points: pool members read them (they only exist once a match has finished).
+create policy "members read" on public.prediction_scores for select to authenticated
   using (exists (
     select 1 from public.predictions p
     where p.id = prediction_id and public.is_pool_member(p.pool_id)
   ));
 
--- Palpites especiais: membros leem; o dono cria, altera e marca a resposta.
-create policy "membros leem" on public.pool_questions for select to authenticated
+-- Bonus questions: members read; the owner creates, updates and sets the answer.
+create policy "members read" on public.pool_questions for select to authenticated
   using (public.is_pool_member(pool_id));
-create policy "dono cria" on public.pool_questions for insert to authenticated
+create policy "owner creates" on public.pool_questions for insert to authenticated
   with check (public.is_pool_owner(pool_id));
-create policy "dono altera" on public.pool_questions for update to authenticated
+create policy "owner updates" on public.pool_questions for update to authenticated
   using (public.is_pool_owner(pool_id)) with check (public.is_pool_owner(pool_id));
-create policy "dono apaga" on public.pool_questions for delete to authenticated
+create policy "owner deletes" on public.pool_questions for delete to authenticated
   using (public.is_pool_owner(pool_id));
 
--- Respostas dos palpites especiais: mesma lógica dos palpites, com o prazo da pergunta.
-create policy "leitura" on public.question_answers for select to authenticated
+-- Bonus answers: same logic as predictions, with the question's deadline.
+create policy "read" on public.question_answers for select to authenticated
   using (
     user_id = auth.uid()
     or exists (
@@ -527,7 +527,7 @@ create policy "leitura" on public.question_answers for select to authenticated
       where q.id = question_id and q.closes_at <= now() and public.is_pool_member(q.pool_id)
     )
   );
-create policy "responde no prazo" on public.question_answers for insert to authenticated
+create policy "answer before deadline" on public.question_answers for insert to authenticated
   with check (
     user_id = auth.uid()
     and points is null
@@ -536,7 +536,7 @@ create policy "responde no prazo" on public.question_answers for insert to authe
       where q.id = question_id and q.closes_at > now() and public.is_pool_member(q.pool_id)
     )
   );
-create policy "altera no prazo" on public.question_answers for update to authenticated
+create policy "update before deadline" on public.question_answers for update to authenticated
   using (
     user_id = auth.uid()
     and exists (select 1 from public.pool_questions q where q.id = question_id and q.closes_at > now())
@@ -547,6 +547,6 @@ create policy "altera no prazo" on public.question_answers for update to authent
     and exists (select 1 from public.pool_questions q where q.id = question_id and q.closes_at > now())
   );
 
--- Funções que o app chama diretamente.
+-- Functions the app calls directly.
 revoke execute on function public.recompute_match_scores(bigint) from public, anon, authenticated;
 grant execute on function public.join_pool(text) to authenticated;

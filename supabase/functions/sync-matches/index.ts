@@ -1,10 +1,10 @@
-// Edge Function: busca jogos e resultados na football-data.org e grava no banco.
-// Chamada pelo pg_cron a cada 10 minutos (supabase/setup/agendamento.sql). Só
-// consulta a API quando há jogo em andamento ou quando a última sincronização
-// completa tem mais de 6 horas, para ficar bem abaixo do limite de 10 req/min.
+// Edge Function: fetches matches and results from football-data.org and saves them.
+// Called by pg_cron every 10 minutes (supabase/setup/schedule.sql). It only calls
+// the API when a match is in progress or the last full sync is more than 6 hours
+// old, staying well below the 10 requests/minute limit.
 //
-// Segredos (Edge Functions > Secrets): FOOTBALL_DATA_API_KEY e CRON_SECRET.
-// SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY já vêm prontos no Supabase.
+// Secrets (Edge Functions > Secrets): FOOTBALL_DATA_API_KEY and CRON_SECRET.
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
 
 import { createClient } from '@supabase/supabase-js'
 import { type ApiMatchesResponse, mapStatus, matchResult, seasonOf, teamsOf } from './mapping.ts'
@@ -19,11 +19,11 @@ function json(body: unknown, status = 200) {
 Deno.serve(async (req) => {
   const cronSecret = Deno.env.get('CRON_SECRET')
   if (!cronSecret || req.headers.get('x-cron-secret') !== cronSecret) {
-    return json({ error: 'não autorizado' }, 401)
+    return json({ error: 'unauthorized' }, 401)
   }
 
   const apiKey = Deno.env.get('FOOTBALL_DATA_API_KEY')
-  if (!apiKey) return json({ error: 'FOOTBALL_DATA_API_KEY não configurada' }, 500)
+  if (!apiKey) return json({ error: 'FOOTBALL_DATA_API_KEY is not set' }, 500)
 
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
   const body = await req.json().catch(() => ({})) as { force?: boolean; competitions?: string[] }
@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   for (const code of body.competitions ?? DEFAULT_COMPETITIONS) {
     const res = await fetch(`${API_URL}/competitions/${code}/matches`, { headers: { 'X-Auth-Token': apiKey } })
     if (!res.ok) {
-      results.push({ code, error: `football-data.org respondeu ${res.status}` })
+      results.push({ code, error: `football-data.org responded ${res.status}` })
       continue
     }
     results.push({ code, ...(await save(db, (await res.json()) as ApiMatchesResponse)) })

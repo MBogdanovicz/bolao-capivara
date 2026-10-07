@@ -1,11 +1,11 @@
-name: Manter o Supabase ativo
+name: Keep Supabase active
 
-# O plano grátis do Supabase pausa projetos sem atividade por 7 dias. Durante o
-# campeonato o job de sincronização mantém o projeto ativo; na pausa entre
-# temporadas, esta consulta semanal garante que ele não seja pausado.
+# Supabase's free plan pauses projects after 7 days without activity. During the
+# season the sync job keeps the project active; between seasons this weekly
+# query keeps it from being paused.
 on:
   schedule:
-    - cron: '0 12 * * 1' # toda segunda, 12h UTC
+    - cron: '0 12 * * 1' # every Monday, 12:00 UTC
   workflow_dispatch:
 
 jobs:
