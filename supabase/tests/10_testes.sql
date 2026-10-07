@@ -189,3 +189,34 @@ select pg_temp.check((select total_points from public.pool_ranking where nicknam
 
 reset role;
 \echo 'ok'
+
+-- ---------------------------------------------------------------------------
+-- 7. Sincronização
+-- ---------------------------------------------------------------------------
+select pg_temp.check(public.sync_due(), 'sincroniza quando nunca sincronizou');
+
+update public.sync_state set last_sync_at = now();
+update public.matches set status = 'finished', home_score = 0, away_score = 0 where id = 2;
+update public.matches set kickoff_at = now() + interval '3 days' where id = 2;
+select pg_temp.check(not public.sync_due(), 'não sincroniza sem jogo em andamento');
+
+update public.matches set kickoff_at = now() - interval '30 minutes', status = 'in_play' where id = 2;
+select pg_temp.check(public.sync_due(), 'sincroniza com jogo em andamento');
+
+update public.sync_state set last_sync_at = now() - interval '7 hours';
+update public.matches set status = 'finished' where id = 2;
+select pg_temp.check(public.sync_due(), 'sincroniza quando a última vez foi há mais de 6 horas');
+
+-- Regravar o jogo igual (como o job faz) não recalcula os pontos.
+select set_config('test.computed', (select max(computed_at)::text from public.prediction_scores ps
+  join public.predictions p on p.id = ps.prediction_id where p.match_id = 1), false);
+select pg_sleep(0.05);
+update public.matches set status = 'finished', home_score = 3, away_score = 1 where id = 1;
+select pg_temp.check((select max(computed_at)::text from public.prediction_scores ps
+  join public.predictions p on p.id = ps.prediction_id where p.match_id = 1) = current_setting('test.computed'),
+  'regravar o mesmo placar não recalcula pontos');
+
+set role authenticated;
+select pg_temp.fails($$select public.sync_due()$$, 'usuários não chamam sync_due');
+reset role;
+\echo 'sync ok'

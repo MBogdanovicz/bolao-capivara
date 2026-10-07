@@ -1,0 +1,21 @@
+name: Manter o Supabase ativo
+
+# O plano grátis do Supabase pausa projetos sem atividade por 7 dias. Durante o
+# campeonato o job de sincronização mantém o projeto ativo; na pausa entre
+# temporadas, esta consulta semanal garante que ele não seja pausado.
+on:
+  schedule:
+    - cron: '0 12 * * 1' # toda segunda, 12h UTC
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          curl --fail --silent --show-error \
+            "$SUPABASE_URL/rest/v1/competitions?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" -H "Authorization: Bearer $SUPABASE_ANON_KEY"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}

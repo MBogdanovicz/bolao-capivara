@@ -24,8 +24,10 @@ src/                     app React
   lib/supabase.ts        cliente do Supabase
 supabase/
   migrations/            esquema do banco (tabelas, RLS, pontos, ranking)
+  functions/sync-matches Edge Function que busca jogos na football-data.org
+  setup/                 SQL de configuração única (agendamento)
   tests/                 testes do banco num Postgres comum
-.github/workflows/ci.yml lint, build e testes do banco
+.github/workflows/       CI, publicação da Edge Function e keep-alive
 ```
 
 ## Rodar o app
@@ -47,8 +49,9 @@ DATABASE_URL=postgres://usuario:senha@localhost:5432/banco supabase/tests/run.sh
 
 ## Configuração dos serviços (uma vez)
 
-1. **Supabase:** crie o projeto e rode o conteúdo de
-   `supabase/migrations/20261007000000_esquema_inicial.sql` no SQL Editor.
+1. **Supabase:** crie o projeto e rode, em ordem, o conteúdo de cada arquivo
+   de `supabase/migrations/` no SQL Editor. Quando um PR novo trouxer outra
+   migration, rode só a nova.
 2. **Login por código:** em Authentication > Emails, edite o modelo *Magic Link*
    para mostrar o código `{{ .Token }}` em vez do link. Em Authentication >
    URL Configuration, use `https://bolao.capivaraec.com` como Site URL.
@@ -60,3 +63,29 @@ DATABASE_URL=postgres://usuario:senha@localhost:5432/banco supabase/tests/run.sh
 5. **Domínio:** no GoDaddy, crie um registro CNAME `bolao` apontando para o
    endereço `*.pages.dev` do projeto, e adicione o domínio em Custom domains
    no Cloudflare Pages.
+
+## Sincronização de jogos
+
+A Edge Function `sync-matches` busca os jogos do Brasileirão na football-data.org
+e grava no banco. O `pg_cron` a chama a cada 10 minutos, mas ela só consulta a
+API quando há jogo em andamento ou quando a última sincronização tem mais de 6
+horas. Quando um jogo encerra, o banco calcula os pontos sozinho.
+
+Nenhuma chave vai no código nem no chat. Cada uma fica guardada no serviço que a usa:
+
+| Onde | Nome | Valor |
+| --- | --- | --- |
+| Supabase > Edge Functions > Secrets | `FOOTBALL_DATA_API_KEY` | Chave recebida por e-mail da football-data.org |
+| Supabase > Edge Functions > Secrets | `CRON_SECRET` | Um texto longo e aleatório inventado por você |
+| GitHub > Settings > Secrets and variables > Actions | `SUPABASE_ACCESS_TOKEN` | Token criado em supabase.com/dashboard/account/tokens |
+| GitHub > Settings > Secrets and variables > Actions | `SUPABASE_PROJECT_REF` | O código do projeto, que aparece na URL do Supabase |
+| GitHub > Settings > Secrets and variables > Actions | `SUPABASE_URL` e `SUPABASE_ANON_KEY` | Os mesmos do `.env.local` (usados pelo keep-alive) |
+
+Depois de cadastrar os segredos:
+
+1. No GitHub, em Actions > Publicar Edge Functions, clique em **Run workflow**
+   para publicar a função (depois disso ela é republicada sozinha a cada merge).
+2. No SQL Editor do Supabase, rode `supabase/setup/agendamento.sql`, trocando
+   a URL do projeto e o `CRON_SECRET` pelos valores reais.
+3. Em até 10 minutos, a tabela `matches` estará preenchida com os jogos do
+   Brasileirão. Os registros de execução ficam em Edge Functions > sync-matches > Logs.
