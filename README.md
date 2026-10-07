@@ -76,8 +76,16 @@ node --test 'supabase/functions/**/*.test.ts'
       ```
    5. Under Authentication > URL Configuration, set the Site URL to
       `https://bolao.capivaraec.com`.
-3. **Login with Google:** create an OAuth Client in Google Cloud (free) and
-   enable the Google provider in Supabase, under Authentication > Providers.
+3. **Login with Google:** create an OAuth Client (type *Web application*) in
+   Google Cloud (free), under APIs & Services > Credentials:
+   - Authorized JavaScript origins: the app addresses, such as
+     `https://bolao.capivaraec.com` and the Worker's `*.workers.dev` address.
+   - Authorized redirect URIs: `https://<project-ref>.supabase.co/auth/v1/callback`
+     (otherwise Google answers `redirect_uri_mismatch`).
+
+   Then enable the Google provider in Supabase, under Authentication > Providers,
+   with the client ID and secret, and add the same app addresses under
+   Authentication > URL Configuration > Redirect URLs.
 4. **Cloudflare Worker:** connect this repository to a Worker named
    `bolao-capivara` (the name must match `wrangler.jsonc`). Under Settings > Build:
    - Build command: `npm run build`
