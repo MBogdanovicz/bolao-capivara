@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { type ApiMatch, mapStatus, matchResult, seasonOf, teamsOf } from './mapping.ts'
+import { type ApiMatch, competitionRow, mapStatus, matchResult, seasonOf, teamsOf } from './mapping.ts'
 
 function match(overrides: Omit<Partial<ApiMatch>, 'score'> & { score?: Partial<ApiMatch['score']> } = {}): ApiMatch {
   const { score, ...rest } = overrides
@@ -65,4 +65,26 @@ test('season comes from the response filter or the first match date', () => {
 test('undecided teams (future knockout) are left out', () => {
   const teams = teamsOf([match(), match({ homeTeam: { id: null, name: null }, awayTeam: { id: 10, name: 'Team A' } })])
   assert.deepEqual(teams.map((t) => t.id).sort(), [10, 20])
+})
+
+test('competition list items become rows with a season label', () => {
+  const row = competitionRow({
+    id: 2021, code: 'PL', name: 'Premier League', type: 'LEAGUE', emblem: 'pl.png', area: { name: 'England' },
+    currentSeason: { startDate: '2026-08-21', endDate: '2027-05-23' },
+  })
+  assert.equal(row.current_season, 2026)
+  assert.equal(row.season_label, '2026/27')
+  assert.equal(row.season_ends_on, '2027-05-23')
+  assert.equal(row.area_name, 'England')
+
+  const bsa = competitionRow({
+    id: 2013, code: 'BSA', name: 'Campeonato Brasileiro Série A', type: 'LEAGUE',
+    currentSeason: { startDate: '2026-01-28', endDate: '2026-12-02' },
+  })
+  assert.equal(bsa.season_label, '2026')
+  assert.equal(bsa.emblem_url, null)
+
+  const none = competitionRow({ id: 1, code: 'X', name: 'X', type: 'CUP', currentSeason: null })
+  assert.equal(none.current_season, null)
+  assert.equal(none.season_label, null)
 })

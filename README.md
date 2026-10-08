@@ -16,6 +16,7 @@ the [definition document](https://claude.ai/code/artifact/01772291-b6e7-4603-beb
 | Login emails | Resend (SMTP) |
 | Database, login and server | Supabase (Postgres, Auth, `pg_cron`, Edge Functions) |
 | Fixtures and results | football-data.org |
+| Team names, crests and squads | ESPN's public site API (unofficial, no key) |
 
 ## Layout
 
@@ -26,7 +27,7 @@ src/                     React app
   lib/supabase.ts        Supabase client
 supabase/
   migrations/            database schema (tables, RLS, scoring, ranking)
-  functions/sync-matches Edge Function that fetches matches from football-data.org
+  functions/sync-matches Edge Function that fetches matches (football-data.org) and teams (ESPN)
   setup/                 one-time setup SQL (scheduling)
   tests/                 database tests on plain Postgres
 .github/workflows/       CI, Edge Function deploy and keep-alive
@@ -100,10 +101,23 @@ node --test 'src/**/*.test.ts' 'supabase/functions/**/*.test.ts'
 
 ## Match sync
 
-The `sync-matches` Edge Function fetches the Brasileirão fixtures from
-football-data.org and saves them. `pg_cron` calls it every 10 minutes, but it
-only calls the API when a match is in progress or the last sync is more than 6
-hours old. When a match finishes, the database computes the points by itself.
+The `sync-matches` Edge Function keeps the database up to date. `pg_cron`
+calls it every 10 minutes, and each run:
+
+1. Once a day, fetches from football-data.org the list of competitions the API
+   key can access. All of them are offered when creating a pool.
+2. Fetches the fixtures and results of each competition that is due: one with
+   a match in progress, or whose last fetch is more than 6 hours old. A run
+   makes at most 8 football-data.org calls (the free plan allows 10 a minute).
+3. Pairs new teams with ESPN teams, by finding the same games on ESPN's
+   scoreboard. From then on a team's name, short name and crest come from ESPN,
+   which has Portuguese names and current crests.
+4. Fetches from ESPN, once a week per team, the squads used by the top scorer
+   question.
+
+When a match finishes, the database computes the points by itself. ESPN's API
+is unofficial: if it stops answering, fixtures and results keep working and
+the top scorer question falls back to typing the name.
 
 No key goes in the code. Each one is stored in the service that uses it:
 
@@ -121,5 +135,5 @@ After adding the secrets:
    deploy the function (after that it redeploys on every merge that changes it).
 2. In the Supabase SQL Editor, run `supabase/setup/schedule.sql`, replacing the
    project URL and the `CRON_SECRET` with the real values.
-3. Within 10 minutes the `matches` table is filled with the Brasileirão
-   fixtures. Run logs are under Edge Functions > sync-matches > Logs.
+3. Within a few runs the `competitions`, `matches`, `teams` and `players`
+   tables are filled. Run logs are under Edge Functions > sync-matches > Logs.

@@ -114,3 +114,41 @@ export function teamsOf(matches: ApiMatch[]): ApiTeam[] {
   }
   return [...byId.values()]
 }
+
+// One item of GET /v4/competitions.
+export type ApiCompetitionListItem = ApiCompetition & {
+  area?: { name?: string | null } | null
+  currentSeason?: { startDate: string; endDate: string } | null
+}
+
+export type CompetitionRow = {
+  api_id: number
+  code: string
+  name: string
+  type: string
+  emblem_url: string | null
+  area_name: string | null
+  current_season: number | null
+  season_label: string | null
+  season_ends_on: string | null
+}
+
+// The season is identified by its start year, the same value the matches
+// endpoint reports in filters.season. Seasons spanning two years are labeled
+// '2026/27'.
+export function competitionRow(c: ApiCompetitionListItem): CompetitionRow {
+  const season = c.currentSeason ?? null
+  const start = season ? Number(season.startDate.slice(0, 4)) : null
+  const end = season ? Number(season.endDate.slice(0, 4)) : null
+  return {
+    api_id: c.id,
+    code: c.code,
+    name: c.name,
+    type: c.type,
+    emblem_url: c.emblem ?? null,
+    area_name: c.area?.name ?? null,
+    current_season: start,
+    season_label: start == null ? null : end != null && end !== start ? `${start}/${String(end).slice(-2)}` : String(start),
+    season_ends_on: season?.endDate ?? null,
+  }
+}

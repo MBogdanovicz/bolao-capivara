@@ -10,7 +10,7 @@ export type Pool = {
   season: number
   first_matchday: number | null
   scoring_rules: Rule[]
-  competition: { name: string; type: string } | null
+  competition: { name: string; type: string; current_season: number | null; season_label: string | null } | null
 }
 
 export type Member = { user_id: string; role: 'owner' | 'member'; nickname: string; avatar_url: string | null }
