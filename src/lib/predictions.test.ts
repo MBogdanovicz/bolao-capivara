@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { draftFrom, firstOf, parseScore, rowsToSave, type SavedPrediction } from './predictions.ts'
+import { draftFrom, firstOf, parseScore, rowsToSave, stepGoals, type SavedPrediction } from './predictions.ts'
 
 test('parseScore accepts 0 to 99 only', () => {
   assert.equal(parseScore('0'), 0)
@@ -39,4 +39,12 @@ test('firstOf handles object and list embeds', () => {
   assert.equal(firstOf([{ a: 2 }])?.a, 2)
   assert.equal(firstOf([]), null)
   assert.equal(firstOf(null), null)
+})
+
+test('stepGoals moves between 0 and 99, starting from an empty field', () => {
+  assert.equal(stepGoals('', 1), '1')
+  assert.equal(stepGoals('', -1), '0')
+  assert.equal(stepGoals('2', 1), '3')
+  assert.equal(stepGoals('0', -1), '0')
+  assert.equal(stepGoals('99', 1), '99')
 })

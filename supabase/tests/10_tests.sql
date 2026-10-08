@@ -399,3 +399,75 @@ select pg_temp.check(not exists (select 1 from public.pools) and not exists (sel
   and not exists (select 1 from public.predictions) and not exists (select 1 from public.pool_questions),
   'the owner deletes the pool with its members, predictions and questions');
 \echo 'delete ok'
+
+-- ---------------------------------------------------------------------------
+-- 11. Invite preview
+-- ---------------------------------------------------------------------------
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+insert into public.pools (name, competition_id, season, owner_id, scoring_rules, description)
+values ('Rodadas', 1, 2026, auth.uid(), '[{"type":"exact_score","points":10},{"type":"winner","points":5}]', 'R$ 10');
+reset role;
+select set_config('test.invite', (select invite_code from public.pools), false);
+select set_config('test.pool', (select id::text from public.pools), false);
+insert into public.pool_questions (pool_id, kind, prompt, points, closes_at)
+values (current_setting('test.pool')::uuid, 'champion', 'Quem será o campeão?', 15, now() + interval '5 days');
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false);
+select pg_temp.check((select count(*) from public.pools) = 0, 'Bruno is not in the pool yet');
+select pg_temp.check(public.pool_preview(lower(current_setting('test.invite'))) @> jsonb_build_object(
+  'name', 'Rodadas', 'owner', 'Alice', 'description', 'R$ 10', 'member_count', 1, 'is_member', false),
+  'the invite shows the pool before joining');
+select pg_temp.check(jsonb_array_length(public.pool_preview(current_setting('test.invite')) -> 'scoring_rules') = 2
+  and public.pool_preview(current_setting('test.invite')) -> 'questions' -> 0 ->> 'prompt' = 'Quem será o campeão?',
+  'the invite shows the rules and bonus questions');
+select pg_temp.check(public.pool_preview('XXXXXX') is null, 'an invalid invite shows nothing');
+select public.join_pool(current_setting('test.invite'));
+select pg_temp.check((public.pool_preview(current_setting('test.invite')) ->> 'is_member')::boolean, 'the preview knows you joined');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000c', false);
+select public.join_pool(current_setting('test.invite'));
+reset role;
+set role anon;
+select pg_temp.fails($$select public.pool_preview('XXXXXX')$$, 'logged-out visitors cannot preview pools');
+reset role;
+\echo 'preview ok'
+
+-- ---------------------------------------------------------------------------
+-- 12. Round summary
+-- ---------------------------------------------------------------------------
+update public.pools set created_at = now() - interval '10 days';
+delete from public.matches where id not in (select match_id from public.predictions);
+insert into public.matches (api_id, competition_id, season, matchday, home_team_id, away_team_id, kickoff_at, status) values
+  (201, 1, 2026, 20, 1, 2, now() - interval '5 days', 'scheduled'),
+  (202, 1, 2026, 21, 1, 2, now() - interval '1 day', 'scheduled'),
+  (203, 1, 2026, 21, 3, 4, now() - interval '1 day', 'scheduled'),
+  (204, 1, 2026, 22, 1, 3, now() + interval '1 day', 'scheduled');
+-- Round 20: Alice 1-0 exact, Carla 0-0 wrong. Round 21: Bruno exact twice, Alice right winner once.
+insert into public.predictions (pool_id, user_id, match_id, home_score, away_score)
+select current_setting('test.pool')::uuid, u::uuid, m.id, h, a
+from (values
+  ('00000000-0000-0000-0000-00000000000a', 201, 1, 0), ('00000000-0000-0000-0000-00000000000c', 201, 0, 0),
+  ('00000000-0000-0000-0000-00000000000b', 202, 2, 0), ('00000000-0000-0000-0000-00000000000b', 203, 1, 1),
+  ('00000000-0000-0000-0000-00000000000a', 202, 3, 1)
+) v(u, api, h, a) join public.matches m on m.api_id = v.api;
+update public.matches set status = 'finished', home_score = 1, away_score = 0 where api_id = 201;
+update public.matches set status = 'finished', home_score = 2, away_score = 0 where api_id = 202;
+select pg_temp.check(not exists (select 1 from public.round_summaries_due()),
+  'no summary while a match of the round is still to be played (round 20 is too old)');
+update public.matches set status = 'postponed' where api_id = 203;
+select pg_temp.check((select array_agg(matchday) from public.round_summaries_due() where user_id = '00000000-0000-0000-0000-00000000000b') = '{21}',
+  'a round ends when only postponed matches are left');
+update public.matches set status = 'finished', home_score = 1, away_score = 1 where api_id = 203;
+select pg_temp.check((select array_agg(row(points, place, previous_place, members)::text order by user_id) from public.round_summaries_due())
+  = '{"(5,2,1,3)","(20,1,2,3)","(0,3,2,3)"}',
+  'points in the round and the position before and after it (ties share it)');
+insert into public.round_summaries_sent (pool_id, matchday) values (current_setting('test.pool')::uuid, 21);
+select pg_temp.check(not exists (select 1 from public.round_summaries_due()), 'one summary per round');
+delete from public.round_summaries_sent;
+update public.pools set created_at = now();
+select pg_temp.check(not exists (select 1 from public.round_summaries_due()), 'no summary of a round played before the pool existed');
+set role authenticated;
+select pg_temp.fails($$select public.round_summaries_due()$$, 'users cannot call round_summaries_due');
+reset role;
+\echo 'round summary ok'

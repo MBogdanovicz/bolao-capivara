@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { monthLabel, periodsIn, rankPeriod, type PeriodPoints } from '../../lib/ranking'
+import { rankingImage, shareImage } from '../../lib/rankingImage'
 import { supabase } from '../../lib/supabase'
 import { usePool } from './context'
 import Evolution from './Evolution'
@@ -30,6 +31,7 @@ export default function Ranking() {
   const [periodRows, setPeriodRows] = useState<PeriodPoints[] | null>(null)
   const [matchday, setMatchday] = useState<number | null>(null)
   const [month, setMonth] = useState<string | null>(null)
+  const [sharing, setSharing] = useState(false)
 
   useEffect(() => {
     supabase
@@ -64,6 +66,17 @@ export default function Ranking() {
       nickname: byId[r.user_id]?.nickname ?? 'Capivara',
       avatar_url: byId[r.user_id]?.avatar_url ?? null,
     }))
+  }
+
+  async function share() {
+    const period = view === 'round' ? `Rodada ${round}` : view === 'month' ? monthLabel(currentMonth!) : 'Ranking geral'
+    setSharing(true)
+    try {
+      const image = await rankingImage(pool.name, period, rows.map((r) => ({ ...r, points: r.total_points })), userId)
+      await shareImage(image, `${pool.name} · ${period}`)
+    } finally {
+      setSharing(false)
+    }
   }
 
   return (
@@ -116,6 +129,11 @@ export default function Ranking() {
             ))}
           </tbody>
         </table>
+      )}
+      {view !== 'evolution' && rows.length > 0 && (
+        <button type="button" className="secondary share" disabled={sharing} onClick={share}>
+          {sharing ? 'Gerando imagem…' : 'Compartilhar imagem do ranking'}
+        </button>
       )}
       {view !== 'evolution' && <p className="hint">
         Desempate: mais placares exatos, depois mais vencedores certos. Os pontos entram quando o jogo termina.

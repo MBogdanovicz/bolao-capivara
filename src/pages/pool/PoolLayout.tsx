@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useParams } from 'react-router'
 import { useAuth } from '../../auth/context'
+import RulesSummary, { type QuestionSummary } from '../../components/RulesSummary'
 import { seasonLabel } from '../../lib/competitions'
-import { describeRules } from '../../lib/rules'
 import { supabase } from '../../lib/supabase'
 import type { Member, Pool, PoolContext } from './context'
 import DescriptionEditor from './DescriptionEditor'
@@ -15,7 +15,8 @@ export default function PoolLayout() {
   const { session } = useAuth()
   const [pool, setPool] = useState<Pool | null | undefined>(undefined)
   const [members, setMembers] = useState<Member[]>([])
-  const [panel, setPanel] = useState<'invite' | 'members' | 'description' | null>(null)
+  const [panel, setPanel] = useState<'invite' | 'members' | 'description' | 'rules' | null>(null)
+  const [questions, setQuestions] = useState<QuestionSummary[] | null>(null)
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -57,6 +58,14 @@ export default function PoolLayout() {
 
   function toggle(p: typeof panel) {
     setPanel(panel === p ? null : p)
+    if (p === 'rules' && questions === null) {
+      supabase
+        .from('pool_questions')
+        .select('prompt, points, answer_count, closes_at')
+        .eq('pool_id', poolId)
+        .order('closes_at')
+        .then(({ data }) => setQuestions((data ?? []) as QuestionSummary[]))
+    }
   }
 
   async function share() {
@@ -86,7 +95,8 @@ export default function PoolLayout() {
       <p className="hint">
         {pool.competition?.name} {pool.competition ? seasonLabel(pool.competition, pool.season) : pool.season}
         {pool.first_matchday ? ` · desde a rodada ${pool.first_matchday}` : ''} · {members.length}{' '}
-        {members.length === 1 ? 'participante' : 'participantes'}
+        {members.length === 1 ? 'participante' : 'participantes'} ·{' '}
+        <button type="button" className="link" onClick={() => toggle('rules')}>{panel === 'rules' ? 'Esconder regras' : 'Ver regras'}</button>
       </p>
 
       {panel === 'description' ? (
@@ -113,11 +123,13 @@ export default function PoolLayout() {
           <p>Mande este link para quem você quer no bolão:</p>
           <p className="invite">{inviteUrl}</p>
           <button type="button" onClick={share}>{copied ? 'Link copiado' : 'Compartilhar convite'}</button>
-          <details>
-            <summary>Regras de pontuação</summary>
-            <ul>{describeRules(pool.scoring_rules).map((r) => <li key={r}>{r}</li>)}</ul>
-            <p className="hint">Placar exato vale sozinho. Senão, as outras regras que acertar se somam.</p>
-          </details>
+          <p className="hint">Quem abrir o link vê as regras antes de entrar.</p>
+        </section>
+      )}
+
+      {panel === 'rules' && (
+        <section className="card">
+          <RulesSummary rules={pool.scoring_rules} questions={questions} />
         </section>
       )}
 

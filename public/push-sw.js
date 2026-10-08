@@ -1,9 +1,9 @@
 // Push handling, loaded into the generated service worker (vite.config.ts,
-// workbox.importScripts). Messages come from the sync's reminders:
-// { title, body, url }.
+// workbox.importScripts). Messages come from the sync's reminders and round
+// summaries: { title, body, url, tag? }.
 
 self.addEventListener('push', (event) => {
-  let notice = { title: 'Bolão Capivara', body: 'Tem jogo começando sem o seu palpite.', url: '/' }
+  let notice = { title: 'Bolão Capivara', body: 'Tem jogo começando sem o seu palpite.', url: '/', tag: 'reminder' }
   try {
     if (event.data) notice = { ...notice, ...event.data.json() }
   } catch {
@@ -12,7 +12,7 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(notice.title, {
     body: notice.body,
     icon: '/pwa-192x192.png',
-    tag: 'reminder', // a newer reminder replaces the previous one
+    tag: notice.tag, // a newer notice with the same tag replaces the previous one
     data: { url: notice.url },
   }))
 })

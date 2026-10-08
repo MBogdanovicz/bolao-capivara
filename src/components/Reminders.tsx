@@ -3,7 +3,8 @@ import { disableReminders, enableReminders, pushSupport, remindersOn } from '../
 
 type State = 'loading' | 'off' | 'on' | 'dismissed' | 'denied' | 'error'
 
-// Home screen switch for prediction reminders on this device.
+// Home screen switch for push notifications on this device: prediction
+// reminders and the end-of-round summary.
 export default function Reminders() {
   const support = pushSupport()
   const [state, setState] = useState<State>('loading')
@@ -42,13 +43,13 @@ export default function Reminders() {
 
   if (support === 'unsupported') return null
   if (support === 'install-first') {
-    return <p className="hint">Para receber lembretes de palpite no iPhone, instale o Bolão na Tela de Início.</p>
+    return <p className="hint">Para receber lembretes de palpite e o resumo das rodadas no iPhone, instale o Bolão na Tela de Início.</p>
   }
   if (state === 'loading') return null
   if (state === 'on') {
     return (
       <p className="hint">
-        Lembretes de palpite ativados ·{' '}
+        Notificações ativadas ·{' '}
         <button type="button" className="link" disabled={busy} onClick={disable}>Desativar</button>
       </p>
     )
@@ -56,21 +57,21 @@ export default function Reminders() {
   if (state === 'denied') {
     return (
       <section className="card">
-        <h3>Lembretes de palpite</h3>
+        <h3>Notificações</h3>
         <p>As notificações do Bolão estão bloqueadas neste aparelho. Para liberar:</p>
         <ul className="steps">
           <li>App instalado: Configurações do Android &gt; Apps &gt; Bolão &gt; Notificações.</li>
           <li>No Chrome: toque no ícone à esquerda do endereço &gt; Permissões &gt; Notificações.</li>
         </ul>
-        <p className="hint">Depois, volte aqui e toque em Ativar lembretes.</p>
+        <p className="hint">Depois, volte aqui e toque em Ativar notificações.</p>
       </section>
     )
   }
   return (
     <section className="card">
-      <h3>Lembretes de palpite</h3>
-      <p>Receba um aviso quando faltar palpite para um jogo que começa em até 3 horas.</p>
-      <button type="button" disabled={busy} onClick={enable}>Ativar lembretes</button>
+      <h3>Notificações</h3>
+      <p>Receba um aviso quando faltar palpite para um jogo que começa em até 3 horas, e o resumo de cada rodada com seus pontos e sua posição.</p>
+      <button type="button" disabled={busy} onClick={enable}>Ativar notificações</button>
       {state === 'dismissed' && <p className="hint">O pedido de permissão foi fechado. Toque de novo e escolha Permitir.</p>}
       {state === 'error' && <p className="error">Não foi possível ativar agora. Tente de novo mais tarde.</p>}
     </section>

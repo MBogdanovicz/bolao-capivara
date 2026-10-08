@@ -33,6 +33,13 @@ export function draftFrom(saved: SavedPrediction | undefined): Draft {
     : { home: '', away: '', advancing: null, penalties: null }
 }
 
+// The goal count after tapping + or −. On an empty field, + gives 1 and −
+// gives 0, so a 0 can be picked without the keyboard too.
+export function stepGoals(value: string, delta: 1 | -1): string {
+  if (value === '') return delta === 1 ? '1' : '0'
+  return String(Math.min(99, Math.max(0, Number(value) + delta)))
+}
+
 // Rows to save: complete drafts that differ from what is saved, for matches
 // that have not kicked off. Incomplete drafts are left alone.
 export function rowsToSave(
