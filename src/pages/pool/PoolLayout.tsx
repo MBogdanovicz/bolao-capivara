@@ -104,7 +104,7 @@ export default function PoolLayout() {
       )}
 
       {panel === 'members' && (
-        <MembersCard poolId={pool.id} members={members} userId={userId} isOwner={context.isOwner}
+        <MembersCard poolId={pool.id} poolName={pool.name} members={members} userId={userId} isOwner={context.isOwner}
           onRemoved={(id) => setMembers(members.filter((m) => m.user_id !== id))} />
       )}
 
