@@ -61,3 +61,30 @@ export function describeRules(rules: Rule[]): string[] {
 export const RULE_LABELS: Record<PointsRuleType, string> = Object.fromEntries(
   RULE_OPTIONS.map((o) => [o.type, o.label]),
 ) as Record<PointsRuleType, string>
+
+// Points of a prediction for the current score, mirroring the database's
+// score_prediction() for the score rules. Used for the provisional points of
+// a match in progress; the database scores it for good when it ends. Who goes
+// through and penalties are only known at the end, so they are left out.
+export function livePoints(
+  rules: Rule[], stage: string,
+  pred: { home: number; away: number }, real: { home: number; away: number },
+): number {
+  const exact = pred.home === real.home && pred.away === real.away
+  let points = 0
+  let weight = 1
+  for (const rule of rules) {
+    if (rule.type === 'stage_weight') {
+      weight = rule.stages[stage] ?? 1
+      continue
+    }
+    const hit =
+      rule.type === 'exact_score' ? exact
+      : rule.type === 'winner' ? !exact && Math.sign(pred.home - pred.away) === Math.sign(real.home - real.away)
+      : rule.type === 'goal_difference' ? !exact && real.home !== real.away && pred.home - pred.away === real.home - real.away
+      : rule.type === 'one_team_goals' ? !exact && (pred.home === real.home || pred.away === real.away)
+      : false
+    if (hit) points += rule.points
+  }
+  return Math.round(points * weight)
+}
