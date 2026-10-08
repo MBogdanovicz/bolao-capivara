@@ -53,3 +53,27 @@ export function monthLabel(month: string): string {
   const name = MONTHS[m - 1]
   return `${name[0].toUpperCase()}${name.slice(1)} de ${year}`
 }
+
+export type EvolutionPoint = { matchday: number; points: number; position: number }
+
+// Position of each member after every round, counting match points up to and
+// including that round (bonus answers only count in the overall ranking).
+export function evolution(memberIds: string[], rows: PeriodPoints[]): Map<string, EvolutionPoint[]> {
+  const { matchdays } = periodsIn(rows)
+  const totals = new Map(memberIds.map((id) => [id, { points: 0, exact_scores: 0, right_winners: 0 }]))
+  const out = new Map<string, EvolutionPoint[]>(memberIds.map((id) => [id, []]))
+  for (const matchday of matchdays) {
+    for (const r of rows) {
+      const t = totals.get(r.user_id)
+      if (r.matchday !== matchday || !t) continue
+      t.points += r.points
+      t.exact_scores += r.exact_scores
+      t.right_winners += r.right_winners
+    }
+    const cumulative = [...totals].map(([user_id, t]) => ({ user_id, matchday, month: '', ...t }))
+    for (const r of rankPeriod(memberIds, cumulative, { kind: 'round', matchday })) {
+      out.get(r.user_id)!.push({ matchday, points: r.points, position: r.position })
+    }
+  }
+  return out
+}
