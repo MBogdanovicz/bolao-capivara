@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useAuth } from '../auth/context'
+import { COMPETITION_SELECT, competitionLabel, sortCompetitions, type Competition } from '../lib/competitions'
 import { firstOpenMatchday } from '../lib/matches'
 import { QuestionFields, type QuestionForm } from '../components/QuestionFields'
 import { QUESTION_TEMPLATES, toLocalInput, validateDraft } from '../lib/questions'
 import { buildRules, ruleOptionsFor, type PointsRuleType } from '../lib/rules'
 import { supabase } from '../lib/supabase'
 
-type Competition = { id: number; name: string; type: string; current_season: number | null }
 type MatchSlot = { matchday: number | null; kickoff_at: string }
 
 export default function CreatePool() {
@@ -24,17 +24,17 @@ export default function CreatePool() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [today] = useState(() => new Date())
   const competition = competitions?.find((c) => c.id === competitionId) ?? null
   const ruleOptions = useMemo(() => ruleOptionsFor(competition?.type ?? 'LEAGUE'), [competition])
 
   useEffect(() => {
     supabase
       .from('competitions')
-      .select('id, name, type, current_season')
+      .select(COMPETITION_SELECT)
       .not('current_season', 'is', null)
-      .order('name')
       .then(({ data }) => {
-        const list = (data ?? []) as Competition[]
+        const list = sortCompetitions((data ?? []) as Competition[], new Date())
         setCompetitions(list)
         if (list.length > 0) chooseCompetition(list[0])
       })
@@ -152,7 +152,7 @@ export default function CreatePool() {
             Campeonato
             <select value={competitionId ?? ''} onChange={(e) => chooseCompetition(competitions.find((c) => c.id === Number(e.target.value))!)}>
               {competitions.map((c) => (
-                <option key={c.id} value={c.id}>{c.name} {c.current_season}</option>
+                <option key={c.id} value={c.id}>{competitionLabel(c, today)}</option>
               ))}
             </select>
           </label>

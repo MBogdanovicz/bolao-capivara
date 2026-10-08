@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useParams } from 'react-router'
 import { useAuth } from '../../auth/context'
+import { seasonLabel } from '../../lib/competitions'
 import { describeRules } from '../../lib/rules'
 import { supabase } from '../../lib/supabase'
 import type { Member, Pool, PoolContext } from './context'
@@ -18,7 +19,7 @@ export default function PoolLayout() {
   useEffect(() => {
     supabase
       .from('pools')
-      .select('id, name, owner_id, invite_code, competition_id, season, first_matchday, scoring_rules, competition:competitions(name, type)')
+      .select('id, name, owner_id, invite_code, competition_id, season, first_matchday, scoring_rules, competition:competitions(name, type, current_season, season_label)')
       .eq('id', poolId)
       .maybeSingle()
       .then(({ data }) => setPool((data as Pool | null) ?? null))
@@ -74,7 +75,7 @@ export default function PoolLayout() {
       </header>
       <h1>{pool.name}</h1>
       <p className="hint">
-        {pool.competition?.name} {pool.season}
+        {pool.competition?.name} {pool.competition ? seasonLabel(pool.competition, pool.season) : pool.season}
         {pool.first_matchday ? ` · desde a rodada ${pool.first_matchday}` : ''} · {members.length}{' '}
         {members.length === 1 ? 'participante' : 'participantes'}
       </p>

@@ -193,19 +193,36 @@ reset role;
 -- ---------------------------------------------------------------------------
 -- 7. Sync
 -- ---------------------------------------------------------------------------
-select pg_temp.check(public.sync_due(), 'syncs when it never synced');
+create function pg_temp.due() returns text[] language sql as $$ select coalesce(array_agg(code), '{}') from public.competitions_due() $$;
+insert into public.competitions (api_id, code, name, current_season, season_ends_on)
+values (2000, 'WC', 'FIFA World Cup', 2026, current_date - 30);
 
-update public.sync_state set last_sync_at = now();
+select pg_temp.check(pg_temp.due() = '{BSA,WC}', 'syncs competitions that never synced');
+
+update public.competitions set synced_at = now();
 update public.matches set status = 'finished', home_score = 0, away_score = 0 where id = 2;
 update public.matches set kickoff_at = now() + interval '3 days' where id = 2;
-select pg_temp.check(not public.sync_due(), 'does not sync without a match in progress');
+select pg_temp.check(pg_temp.due() = '{}', 'does not sync without a match in progress');
 
 update public.matches set kickoff_at = now() - interval '30 minutes', status = 'in_play' where id = 2;
-select pg_temp.check(public.sync_due(), 'syncs with a match in progress');
+select pg_temp.check(pg_temp.due() = '{BSA}', 'syncs a competition with a match in progress');
 
-update public.sync_state set last_sync_at = now() - interval '7 hours';
+update public.competitions set synced_at = now() - interval '7 hours';
 update public.matches set status = 'finished' where id = 2;
-select pg_temp.check(public.sync_due(), 'syncs when the last sync was over 6 hours ago');
+select pg_temp.check(pg_temp.due() = '{BSA}', 'syncs after 6 hours, but not a season that ended weeks ago');
+
+-- ESPN pairing: matches with an unpaired team are looked up; then squads of
+-- paired teams with a match still to play, and not again within a week.
+update public.matches set kickoff_at = now() + interval '3 days', status = 'scheduled', home_score = null, away_score = null where id = 2;
+select pg_temp.check((select count(*) from public.unpaired_matches() where kickoff_at > now()) = 1, 'unpaired match ahead is listed');
+select pg_temp.check(not exists (select 1 from public.squads_due()), 'unpaired teams have no squad due');
+update public.teams set espn_id = 'e' || id, espn_league = 'bra.1';
+select pg_temp.check(not exists (select 1 from public.unpaired_matches()), 'paired teams are not looked up again');
+select pg_temp.check((select array_agg(id order by id) from public.squads_due()) =
+  (select array[least(home_team_id, away_team_id), greatest(home_team_id, away_team_id)] from public.matches where id = 2),
+  'squads due are the paired teams with a match ahead');
+update public.teams set squad_synced_at = now();
+select pg_temp.check(not exists (select 1 from public.squads_due()), 'squads fetched this week are not due');
 
 -- Rewriting the match unchanged (as the job does) does not recompute points.
 select set_config('test.computed', (select max(computed_at)::text from public.prediction_scores ps
@@ -217,6 +234,9 @@ select pg_temp.check((select max(computed_at)::text from public.prediction_score
   'rewriting the same score does not recompute points');
 
 set role authenticated;
-select pg_temp.fails($$select public.sync_due()$$, 'users cannot call sync_due');
+select pg_temp.fails($$select public.competitions_due()$$, 'users cannot call competitions_due');
+select pg_temp.fails($$select public.squads_due()$$, 'users cannot call squads_due');
+select pg_temp.fails($$select public.unpaired_matches()$$, 'users cannot call unpaired_matches');
+select pg_temp.check((select count(*) from public.players) = 0, 'users can read players');
 reset role;
 \echo 'sync ok'

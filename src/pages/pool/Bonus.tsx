@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { PlayerPicker } from '../../components/PlayerPicker'
 import { QuestionFields, type QuestionForm } from '../../components/QuestionFields'
 import { teamName, teamsIn, type Match, type Team } from '../../lib/matches'
 import {
@@ -198,7 +199,9 @@ function QuestionCard({ question: q, mine, teams, teamNames, nicknames, userId, 
       {!closed && (
         <>
           {Array.from({ length: q.answer_count }, (_, i) =>
-            teamQuestion ? (
+            q.kind === 'top_scorer' ? (
+              <PlayerPicker key={i} teams={teams} value={values[i] ?? ''} onChange={(name) => setValues(Object.assign([...values], { [i]: name }))} />
+            ) : teamQuestion ? (
               <select key={i} value={values[i] ?? ''} onChange={(e) => setValues(Object.assign([...values], { [i]: e.target.value }))}>
                 <option value="">{q.answer_count > 1 ? `${i + 1}º time` : 'Escolha o time'}</option>
                 {teams.map((t) => <option key={t.id} value={String(t.id)}>{teamName(t)}</option>)}

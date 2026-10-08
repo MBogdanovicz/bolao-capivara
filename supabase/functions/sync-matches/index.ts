@@ -1,16 +1,31 @@
-// Edge Function: fetches matches and results from football-data.org and saves them.
-// Called by pg_cron every 10 minutes (supabase/setup/schedule.sql). It only calls
-// the API when a match is in progress or the last full sync is more than 6 hours
-// old, staying well below the 10 requests/minute limit.
+// Edge Function: fetches competitions, matches and results from
+// football-data.org, and team names, crests and squads from ESPN (espn.ts).
+// Called by pg_cron every 10 minutes (supabase/setup/schedule.sql). Each run:
+//   1. fetches the list of competitions the API key can access, once a day;
+//   2. fetches the matches of each competition that is due (competitions_due():
+//      a match in progress, or over 6 hours since the last fetch), at most
+//      MAX_REQUESTS football-data.org calls in all;
+//   3. pairs new teams with ESPN teams through a few days of fixtures;
+//   4. fetches from ESPN the squads that are due (squads_due()).
 //
 // Secrets (Edge Functions > Secrets): FOOTBALL_DATA_API_KEY and CRON_SECRET.
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
 
 import { createClient } from '@supabase/supabase-js'
-import { type ApiMatchesResponse, mapStatus, matchResult, seasonOf, teamsOf } from './mapping.ts'
+import {
+  ESPN_LEAGUES, ESPN_URL, type FdMatch, espnDate, eventsOf, pairTeams, rosterOf, teamLook,
+} from './espn.ts'
+import {
+  type ApiCompetitionListItem, type ApiMatchesResponse, competitionRow, mapStatus, matchResult, seasonOf, teamsOf,
+} from './mapping.ts'
 
 const API_URL = 'https://api.football-data.org/v4'
-const DEFAULT_COMPETITIONS = ['BSA']
+// football-data.org allows 10 requests per minute; runs are 10 minutes apart.
+const MAX_REQUESTS = 8
+// ESPN has no published limit; keep each run small anyway.
+const ESPN_DAYS_PER_RUN = 3
+const ESPN_SQUADS_PER_RUN = 10
+const LIST_EVERY_MS = 24 * 3600_000
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -26,27 +41,68 @@ Deno.serve(async (req) => {
   if (!apiKey) return json({ error: 'FOOTBALL_DATA_API_KEY is not set' }, 500)
 
   const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+  // force: fetch the competition list now. competitions: fetch these codes now.
   const body = await req.json().catch(() => ({})) as { force?: boolean; competitions?: string[] }
 
-  if (!body.force) {
-    const { data: due, error } = await db.rpc('sync_due')
-    if (error) return json({ error: error.message }, 500)
-    if (!due) return json({ skipped: true })
+  let budget = MAX_REQUESTS
+  const api = (path: string) => {
+    budget--
+    return fetch(`${API_URL}${path}`, { headers: { 'X-Auth-Token': apiKey } })
+  }
+  const results: Record<string, unknown>[] = []
+
+  // 1. Competition list.
+  const { data: state } = await db.from('sync_state').select('competitions_listed_at').eq('id', 1).single()
+  const listedAt = state?.competitions_listed_at ? new Date(state.competitions_listed_at).getTime() : 0
+  if (body.force || Date.now() - listedAt > LIST_EVERY_MS) {
+    const res = await api('/competitions')
+    if (res.ok) {
+      const { competitions } = (await res.json()) as { competitions: ApiCompetitionListItem[] }
+      const { error } = await db.from('competitions').upsert(competitions.map(competitionRow), { onConflict: 'api_id' })
+      if (error) results.push({ step: 'competitions', error: error.message })
+      else {
+        await db.from('sync_state').update({ competitions_listed_at: new Date().toISOString() }).eq('id', 1)
+        results.push({ step: 'competitions', count: competitions.length })
+      }
+    } else {
+      results.push({ step: 'competitions', error: `football-data.org responded ${res.status}` })
+    }
   }
 
-  const results = []
-  for (const code of body.competitions ?? DEFAULT_COMPETITIONS) {
-    const res = await fetch(`${API_URL}/competitions/${code}/matches`, { headers: { 'X-Auth-Token': apiKey } })
+  // 2. Matches.
+  let codes = body.competitions
+  if (!codes) {
+    const { data, error } = await db.rpc('competitions_due')
+    if (error) return json({ error: error.message }, 500)
+    codes = (data as { code: string }[]).map((r) => r.code)
+  }
+  for (const code of codes) {
+    if (budget <= 0) break
+    const res = await api(`/competitions/${code}/matches`)
     if (!res.ok) {
       results.push({ code, error: `football-data.org responded ${res.status}` })
+      if (res.status === 429) break
+      // Not in the plan or gone: try again only after the usual 6 hours.
+      if (res.status === 403 || res.status === 404) {
+        await db.from('competitions').update({ synced_at: new Date().toISOString() }).eq('code', code)
+      }
       continue
     }
     results.push({ code, ...(await save(db, (await res.json()) as ApiMatchesResponse)) })
   }
 
+  // 3. Pair teams with ESPN, a few match days per run.
+  results.push(...(await pairWithEspn(db)))
+
+  // 4. Squads from ESPN.
+  const { data: squads, error: squadErr } = await db.rpc('squads_due').limit(ESPN_SQUADS_PER_RUN)
+  if (squadErr) return json({ error: squadErr.message }, 500)
+  for (const t of squads as { id: number; espn_id: string; espn_league: string }[]) {
+    results.push({ team: t.id, ...(await saveSquad(db, t)) })
+  }
+
   const failed = results.some((r) => 'error' in r)
-  if (!failed) await db.from('sync_state').update({ last_sync_at: new Date().toISOString() }).eq('id', 1)
-  return json({ results }, failed ? 502 : 200)
+  return json({ results, requests: MAX_REQUESTS - budget }, failed ? 502 : 200)
 })
 
 // deno-lint-ignore no-explicit-any
@@ -64,15 +120,18 @@ async function save(db: any, data: ApiMatchesResponse) {
     .single()
   if (compErr) return { error: compErr.message }
 
-  const { data: teams, error: teamErr } = await db
+  // New teams only: names and crests of known teams come from ESPN.
+  const apiTeams = teamsOf(data.matches)
+  const { error: insertErr } = await db
     .from('teams')
     .upsert(
-      teamsOf(data.matches).map((t) => ({
+      apiTeams.map((t) => ({
         api_id: t.id, name: t.name, short_name: t.shortName ?? null, tla: t.tla ?? null, crest_url: t.crest ?? null,
       })),
-      { onConflict: 'api_id' },
+      { onConflict: 'api_id', ignoreDuplicates: true },
     )
-    .select('id, api_id')
+  if (insertErr) return { error: insertErr.message }
+  const { data: teams, error: teamErr } = await db.from('teams').select('id, api_id').in('api_id', apiTeams.map((t) => t.id))
   if (teamErr) return { error: teamErr.message }
 
   const teamId = new Map<number, number>((teams as { id: number; api_id: number }[]).map((t) => [t.api_id, t.id]))
@@ -101,5 +160,76 @@ async function save(db: any, data: ApiMatchesResponse) {
 
   const { error: matchErr } = await db.from('matches').upsert(rows, { onConflict: 'api_id' })
   if (matchErr) return { error: matchErr.message }
+  await db.from('competitions').update({ synced_at: new Date().toISOString() }).eq('id', competition.id)
   return { season, teams: teamId.size, matches: rows.length }
+}
+
+type UnpairedRow = {
+  code: string; kickoff_at: string
+  home_id: number; home_name: string; home_short: string | null; home_tla: string | null
+  away_id: number; away_name: string; away_short: string | null; away_tla: string | null
+}
+
+// Looks up, on ESPN's scoreboard, a few days with games of teams not yet
+// paired, and copies ESPN's name and crest onto the teams it can pair.
+// deno-lint-ignore no-explicit-any
+async function pairWithEspn(db: any): Promise<Record<string, unknown>[]> {
+  const { data, error } = await db.rpc('unpaired_matches')
+  if (error) return [{ step: 'espn', error: error.message }]
+
+  const days = new Map<string, { league: string; date: string; matches: FdMatch[] }>()
+  for (const r of data as UnpairedRow[]) {
+    const league = ESPN_LEAGUES[r.code]
+    if (!league) continue
+    const date = espnDate(r.kickoff_at)
+    const day = days.get(`${league}/${date}`) ?? { league, date, matches: [] }
+    day.matches.push({
+      kickoff_at: r.kickoff_at,
+      home: { id: r.home_id, name: r.home_name, short_name: r.home_short, tla: r.home_tla },
+      away: { id: r.away_id, name: r.away_name, short_name: r.away_short, tla: r.away_tla },
+    })
+    days.set(`${league}/${date}`, day)
+  }
+
+  // Random days, so a day ESPN cannot match does not block the others.
+  const picked = [...days.values()].sort(() => Math.random() - 0.5).slice(0, ESPN_DAYS_PER_RUN)
+  const results: Record<string, unknown>[] = []
+  for (const day of picked) {
+    const res = await fetch(`${ESPN_URL}/${day.league}/scoreboard?lang=pt&region=br&dates=${day.date}`)
+    if (!res.ok) {
+      results.push({ espn: `${day.league}/${day.date}`, error: `ESPN responded ${res.status}` })
+      continue
+    }
+    const pairs = pairTeams(day.matches, eventsOf(await res.json()))
+    let paired = 0
+    for (const [teamId, espnTeam] of pairs) {
+      const { error } = await db.from('teams').update(teamLook(espnTeam, day.league)).eq('id', teamId).is('espn_id', null)
+      if (!error) paired++
+    }
+    results.push({ espn: `${day.league}/${day.date}`, paired })
+  }
+  return results
+}
+
+// Saves a team's squad from ESPN. Players who left the team keep their row
+// (answers may name them) but lose the team.
+// deno-lint-ignore no-explicit-any
+async function saveSquad(db: any, team: { id: number; espn_id: string; espn_league: string }) {
+  const res = await fetch(`${ESPN_URL}/${team.espn_league}/teams/${team.espn_id}/roster?lang=pt&region=br`)
+  if (!res.ok) return { error: `ESPN responded ${res.status}` }
+  const players = rosterOf(await res.json())
+
+  if (players.length > 0) {
+    const { error } = await db.from('players').upsert(players.map((p) => ({ ...p, team_id: team.id })), { onConflict: 'espn_id' })
+    if (error) return { error: error.message }
+  }
+  const { error: leftErr } = await db
+    .from('players')
+    .update({ team_id: null })
+    .eq('team_id', team.id)
+    .not('espn_id', 'in', `(${players.map((p) => `"${p.espn_id}"`).join(',') || '""'})`)
+  if (leftErr) return { error: leftErr.message }
+
+  await db.from('teams').update({ squad_synced_at: new Date().toISOString() }).eq('id', team.id)
+  return { players: players.length }
 }
