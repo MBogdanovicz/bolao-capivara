@@ -256,3 +256,7 @@ button.step { width: 48px; height: 32px; padding: 0; background: var(--surface);
 .capivara-option { align-items: flex-start; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); font-weight: 600; }
 .capivara-option .avatar { width: 40px; height: 40px; flex-shrink: 0; }
 .capivara-option small { display: block; font-weight: 400; color: var(--muted); margin-top: 2px; }
+.standings th, .standings td { padding: 8px 3px; font-size: 0.9rem; }
+.standings .crest { width: 20px; height: 20px; }
+.standings .who { gap: 6px; }
+.live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex-shrink: 0; }
