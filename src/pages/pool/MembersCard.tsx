@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
+import { CAPIVARA_ID } from '../../lib/capivara'
 import { supabase } from '../../lib/supabase'
 import type { Member } from './context'
 
@@ -58,6 +59,7 @@ export default function MembersCard({ poolId, poolName, members, userId, isOwner
               {m.nickname}
               {m.user_id === userId && <small>você</small>}
               {m.role === 'owner' && <small>dono</small>}
+              {m.user_id === CAPIVARA_ID && <small>automática</small>}
             </span>
             {isOwner && m.role === 'member' && (
               <button type="button" className="link danger" disabled={busy} onClick={() => remove(m)}>Remover</button>

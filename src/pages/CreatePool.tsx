@@ -22,6 +22,7 @@ export default function CreatePool() {
   const [firstMatchday, setFirstMatchday] = useState<number | null>(null)
   const [points, setPoints] = useState<Partial<Record<PointsRuleType, number>>>({})
   const [questions, setQuestions] = useState<QuestionForm[]>([])
+  const [withCapivara, setWithCapivara] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -102,6 +103,7 @@ export default function CreatePool() {
         owner_id: session.user.id,
         scoring_rules: rules,
         first_matchday: firstMatchday,
+        with_capivara: withCapivara,
       })
       .select('id')
       .single()
@@ -173,6 +175,15 @@ export default function CreatePool() {
               </select>
             </label>
           )}
+
+          <label className="check capivara-option">
+            <input type="checkbox" checked={withCapivara} onChange={(e) => setWithCapivara(e.target.checked)} />
+            <img className="avatar" src="/capivara.svg" alt="" />
+            <span>
+              Incluir a Capivara
+              <small>Participante automático que palpita sozinha em todos os jogos, pelo desempenho dos times com uma pitada de sorte. Dá para removê-la depois em Participantes.</small>
+            </span>
+          </label>
 
           <fieldset>
             <legend>Pontuação por jogo</legend>

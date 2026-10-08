@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- The Capivara bot's avatar: a cartoon of the crest's capybara, in
+       profile facing left, over the crest's green stripes. -->
+  <defs>
+    <clipPath id="c"><circle cx="64" cy="64" r="64"/></clipPath>
+    <pattern id="s" width="16" height="16" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="16" height="16" fill="#3fcf6a"/>
+      <rect width="7" height="16" fill="#2fb257"/>
+    </pattern>
+  </defs>
+  <g clip-path="url(#c)">
+    <rect width="128" height="128" fill="url(#s)"/>
+    <!-- body and shoulders -->
+    <ellipse cx="92" cy="112" rx="50" ry="36" fill="#a5643a"/>
+    <!-- ear -->
+    <ellipse cx="86" cy="32" rx="9" ry="8" fill="#6b3b1d"/>
+    <ellipse cx="86" cy="33" rx="4.5" ry="4" fill="#4a2510"/>
+    <!-- head: long and boxy, blunt snout to the left -->
+    <path d="M16 62 C14 46 28 38 44 37 C58 30 80 30 94 38 C106 46 110 64 104 82 L98 100 L52 100 C44 94 38 88 32 86 C20 84 16 74 16 62 Z" fill="#a5643a"/>
+    <!-- snout -->
+    <path d="M14 62 C14 50 24 46 34 48 C44 50 46 62 44 72 C42 82 34 88 26 86 C18 84 14 74 14 62 Z" fill="#b97a4c"/>
+    <!-- nostril and mouth -->
+    <path d="M18 56 Q22 53 25 57" fill="none" stroke="#2a160a" stroke-width="3" stroke-linecap="round"/>
+    <path d="M18 78 Q26 82 34 79" fill="none" stroke="#2a160a" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- eye, half closed: the relaxed capybara look -->
+    <ellipse cx="60" cy="50" rx="5.5" ry="5" fill="#1b0f07"/>
+    <circle cx="61.5" cy="48.5" r="1.6" fill="#fff"/>
+    <path d="M53 47 Q60 41 67 47" fill="none" stroke="#6b3b1d" stroke-width="3" stroke-linecap="round"/>
+    <!-- fur strokes -->
+    <path d="M78 58 q4 3 8 1 M84 70 q4 3 8 1 M72 82 q4 3 8 1" fill="none" stroke="#8f5530" stroke-width="2" stroke-linecap="round"/>
+  </g>
+  <circle cx="64" cy="64" r="62.5" fill="none" stroke="#0b0e0c" stroke-width="3"/>
+</svg>
