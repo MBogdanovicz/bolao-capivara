@@ -260,3 +260,9 @@ button.step { width: 48px; height: 32px; padding: 0; background: var(--surface);
 .standings .crest { width: 20px; height: 20px; }
 .standings .who { gap: 6px; }
 .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex-shrink: 0; }
+.others li { display: grid; grid-template-columns: 1fr auto 44px; align-items: center; }
+.other-score { font-variant-numeric: tabular-nums; }
+.other-points { text-align: right; }
+.others .points-badge { margin-left: 0; }
+.points-badge.partial { color: var(--muted); font-style: italic; }
+.points-badge.zero { color: var(--muted); }

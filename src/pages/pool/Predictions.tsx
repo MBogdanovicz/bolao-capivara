@@ -5,7 +5,7 @@ import {
 import {
   draftFrom, firstOf, rowsToSave, stepGoals, type Draft, type SavedPrediction,
 } from '../../lib/predictions'
-import { RULE_LABELS, isKnockoutStage, pointsOf, type PointsRuleType } from '../../lib/rules'
+import { RULE_LABELS, isKnockoutStage, livePoints, pointsOf, type PointsRuleType, type Rule } from '../../lib/rules'
 import { supabase } from '../../lib/supabase'
 import { usePool } from './context'
 
@@ -131,6 +131,7 @@ export default function Predictions() {
             started={hasStarted(m, now)}
             showKnockout={knockoutRules && isKnockoutStage(m.stage)}
             poolId={pool.id}
+            rules={pool.scoring_rules}
             nicknames={Object.fromEntries(members.map((x) => [x.user_id, x.nickname]))}
             userId={userId}
             onEdit={(patch) => edit(m, patch)}
@@ -159,6 +160,7 @@ type CardProps = {
   started: boolean
   showKnockout: boolean
   poolId: string
+  rules: Rule[]
   nicknames: Record<string, string>
   userId: string
   onEdit: (patch: Partial<Draft>) => void
@@ -166,6 +168,14 @@ type CardProps = {
 
 function Crest({ team }: { team: Team | null }) {
   return team?.crest_url ? <img className="crest" src={team.crest_url} alt="" loading="lazy" /> : <span className="crest" />
+}
+
+function PointsBadge({ points, partial }: { points: number; partial: boolean }) {
+  return (
+    <strong className={'points-badge' + (partial ? ' partial' : '') + (points === 0 ? ' zero' : '')} title={partial ? 'Parcial' : undefined}>
+      +{points}{partial && '*'}
+    </strong>
+  )
 }
 
 // Goals of one team: type the number, or tap + and −.
@@ -182,10 +192,22 @@ function GoalsField({ team, value, onChange }: { team: Team | null; value: strin
   )
 }
 
-function MatchCard({ match, draft, saved, started, showKnockout, poolId, nicknames, userId, onEdit }: CardProps) {
+function MatchCard({ match, draft, saved, started, showKnockout, poolId, rules, nicknames, userId, onEdit }: CardProps) {
   const [others, setOthers] = useState<SavedPrediction[] | null>(null)
   const [user, setUser] = useState<Record<number, string>>({})
   const hasResult = match.home_score !== null && match.away_score !== null
+  const live = isLive(match) && hasResult
+
+  // Final points once the database scored the match; while it is being
+  // played, provisional points for the current score.
+  function predictionPoints(p: SavedPrediction): { points: number; partial: boolean } | null {
+    if (p.points != null) return { points: p.points, partial: false }
+    if (!live) return null
+    const points = livePoints(rules, match.stage, { home: p.home_score, away: p.away_score }, { home: match.home_score!, away: match.away_score! })
+    return { points, partial: true }
+  }
+  const mine = saved ? predictionPoints(saved) : null
+  const othersSorted = others && [...others].sort((a, b) => (predictionPoints(b)?.points ?? -1) - (predictionPoints(a)?.points ?? -1))
   const teams = [match.home_team, match.away_team].filter((t): t is Team => t !== null)
 
   async function loadOthers() {
@@ -193,7 +215,7 @@ function MatchCard({ match, draft, saved, started, showKnockout, poolId, nicknam
     const { data } = await supabase.from('predictions').select(PREDICTION_SELECT).eq('pool_id', poolId).eq('match_id', match.id)
     const rows = ((data ?? []) as unknown as PredictionRow[]).filter((r) => r.user_id !== userId)
     setUser(Object.fromEntries(rows.map((r) => [r.id, r.user_id])))
-    setOthers(rows.map(toSaved).sort((a, b) => (b.points ?? 0) - (a.points ?? 0)))
+    setOthers(rows.map(toSaved))
   }
 
   return (
@@ -239,22 +261,29 @@ function MatchCard({ match, draft, saved, started, showKnockout, poolId, nicknam
         <div className="match-foot">
           <span>
             Seu palpite: {saved ? `${saved.home_score} × ${saved.away_score}` : 'nenhum'}
-            {saved?.points != null && <strong className="points-badge">+{saved.points}</strong>}
+            {mine && <PointsBadge {...mine} />}
           </span>
           {saved && saved.rules_hit.length > 0 && (
             <small>{saved.rules_hit.map((r) => RULE_LABELS[r as PointsRuleType] ?? r).join(', ')}</small>
           )}
           <button type="button" className="link" onClick={loadOthers}>{others ? 'Esconder palpites' : 'Ver palpites da turma'}</button>
-          {others && (
-            others.length === 0 ? <small>Ninguém mais palpitou neste jogo.</small> : (
-              <ul className="others">
-                {others.map((o) => (
-                  <li key={o.id}>
-                    <span>{nicknames[user[o.id]] ?? 'Capivara'}</span>
-                    <span>{o.home_score} × {o.away_score}{o.points != null ? ` · +${o.points}` : ''}</span>
-                  </li>
-                ))}
-              </ul>
+          {othersSorted && (
+            othersSorted.length === 0 ? <small>Ninguém mais palpitou neste jogo.</small> : (
+              <>
+                <ul className="others">
+                  {othersSorted.map((o) => {
+                    const p = predictionPoints(o)
+                    return (
+                      <li key={o.id}>
+                        <span className="other-name">{nicknames[user[o.id]] ?? 'Capivara'}</span>
+                        <span className="other-score">{o.home_score} × {o.away_score}</span>
+                        <span className="other-points">{p && <PointsBadge {...p} />}</span>
+                      </li>
+                    )
+                  })}
+                </ul>
+                {live && <small className="hint">Pontos parciais, pelo placar de agora. Valem de vez quando o jogo termina.</small>}
+              </>
             )
           )}
         </div>
