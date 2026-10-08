@@ -186,6 +186,10 @@ update public.matches set home_score = 3 where id = 1;
 set role authenticated;
 select pg_temp.check((select array_agg(nickname || ':' || total_points order by position) from public.pool_ranking)
   = '{Alice:10,bruno:7}', 'points recomputed after a score correction');
+select pg_temp.check((select array_agg(matchday || ':' || points || ':' || exact_scores order by points desc) from public.pool_period_points)
+  = '{30:10:1,30:7:0}', 'points per round');
+select pg_temp.check((select month from public.pool_period_points limit 1)
+  = (select to_char(kickoff_at at time zone 'America/Sao_Paulo', 'YYYY-MM') from public.matches where id = 1), 'points per month');
 
 -- ---------------------------------------------------------------------------
 -- 6. Bonus questions
