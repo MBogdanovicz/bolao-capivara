@@ -8,7 +8,9 @@
 //   3. pairs new teams with ESPN teams through a few days of fixtures;
 //   4. fetches from ESPN the squads that are due (squads_due());
 //   5. when a season ends, answers its automatic bonus questions (champion,
-//      top N, relegated, top scorer; see bonus.ts).
+//      top N, relegated, top scorer; see bonus.ts);
+//   6. sends prediction reminders by push notification (push.ts), creating
+//      the VAPID key pair on the first run.
 //
 // Secrets (Edge Functions > Secrets): FOOTBALL_DATA_API_KEY and CRON_SECRET.
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
@@ -18,6 +20,8 @@ import { type ApiStandingsResponse, type AutoKind, type EspnStatisticsResponse, 
 import {
   ESPN_LEAGUES, type FdMatch, espnDate, espnGet, eventsOf, pairTeams, rosterOf, teamLook,
 } from './espn.ts'
+import { type EcKeys, type Subscription, generateKeys, sendPush } from './push.ts'
+import { type ReminderRow, reminderNotices } from './reminders.ts'
 import {
   type ApiCompetitionListItem, type ApiMatchesResponse, competitionRow, mapStatus, matchResult, seasonOf, teamsOf,
 } from './mapping.ts'
@@ -29,6 +33,8 @@ const MAX_REQUESTS = 8
 const ESPN_DAYS_PER_RUN = 3
 const ESPN_SQUADS_PER_RUN = 10
 const LIST_EVERY_MS = 24 * 3600_000
+// Who the push services contact about our notifications (VAPID "sub").
+const PUSH_SUBJECT = 'https://bolao.capivaraec.com'
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -112,6 +118,9 @@ Deno.serve(async (req) => {
     const standings = s.type === 'LEAGUE' ? await api(`/competitions/${s.code}/standings?season=${s.season}`) : null
     results.push({ resolve: `${s.code}/${s.season}`, ...(await resolveSeason(db, s, standings)) })
   }
+
+  // 6. Prediction reminders.
+  results.push(...(await sendReminders(db)))
 
   const failed = results.some((r) => 'error' in r)
   return json({ results, requests: MAX_REQUESTS - budget }, failed ? 502 : 200)
@@ -292,4 +301,36 @@ async function saveSquad(db: any, team: { id: number; espn_id: string; espn_leag
 
   await db.from('teams').update({ squad_synced_at: new Date().toISOString() }).eq('id', team.id)
   return { players: players.length }
+}
+
+// deno-lint-ignore no-explicit-any
+async function sendReminders(db: any): Promise<Record<string, unknown>[]> {
+  const { data: config } = await db.from('push_config').select('vapid_public, vapid_private').eq('id', 1).maybeSingle()
+  let vapid: EcKeys
+  if (config) vapid = { publicKey: config.vapid_public, privateKey: config.vapid_private }
+  else {
+    vapid = await generateKeys()
+    const { error } = await db.from('push_config').insert({ id: 1, vapid_public: vapid.publicKey, vapid_private: vapid.privateKey })
+    if (error) return [{ step: 'reminders', error: error.message }]
+  }
+
+  const { data: due, error } = await db.rpc('reminders_due')
+  if (error) return [{ step: 'reminders', error: error.message }]
+  const notices = reminderNotices(due as ReminderRow[])
+  if (notices.size === 0) return []
+
+  const users = [...notices.keys()]
+  const { data: subs } = await db.from('push_subscriptions').select('endpoint, user_id, p256dh, auth').in('user_id', users)
+  let sent = 0
+  const gone: string[] = []
+  for (const sub of (subs ?? []) as (Subscription & { user_id: string })[]) {
+    const status = await sendPush(sub, notices.get(sub.user_id)!, vapid, PUSH_SUBJECT).catch(() => 0)
+    if (status >= 200 && status < 300) sent++
+    else if (status === 404 || status === 410) gone.push(sub.endpoint)
+  }
+  if (gone.length) await db.from('push_subscriptions').delete().in('endpoint', gone)
+  // Reminded once a day, even if a push service failed, so nobody gets spammed by retries.
+  const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  await db.from('reminders_sent').upsert(users.map((user_id) => ({ user_id, day })), { ignoreDuplicates: true })
+  return [{ step: 'reminders', people: users.length, sent, expired: gone.length }]
 }

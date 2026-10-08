@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router'
 import { useAuth } from '../auth/context'
 import InstallHelp from '../components/InstallHelp'
+import Reminders from '../components/Reminders'
 import { formatKickoff } from '../lib/matches'
 import { saveNickname } from '../lib/profile'
 import { supabase } from '../lib/supabase'
@@ -34,6 +35,7 @@ export default function MyPools() {
       <NameLine />
 
       <InstallHelp />
+      <Reminders />
 
       {pools === null && <p>Carregando…</p>}
       {pools?.length === 0 && <p>Você ainda não está em nenhum bolão. Crie um ou peça o link de convite a um amigo.</p>}
