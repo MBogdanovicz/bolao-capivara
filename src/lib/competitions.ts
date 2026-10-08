@@ -1,5 +1,5 @@
 // Competitions offered when creating a pool: every one the sync found in the
-// API, finished seasons last and marked as such.
+// API whose season has not ended (a finished season has no matches left).
 
 export type Competition = {
   id: number
@@ -27,13 +27,15 @@ const AREAS: Record<string, string> = {
   France: 'França', Netherlands: 'Holanda', Portugal: 'Portugal', Europe: 'Europa', World: 'Mundo',
 }
 
-export function competitionLabel(c: Competition, today: Date): string {
+export function competitionLabel(c: Competition): string {
   const area = c.area_name ? ` (${AREAS[c.area_name] ?? c.area_name})` : ''
-  return `${c.name}${area} ${seasonLabel(c)}${hasEnded(c, today) ? ' · encerrado' : ''}`
+  return `${c.name}${area} ${seasonLabel(c)}`
 }
 
-// Running seasons first, Brazilian ones on top, then by name.
-export function sortCompetitions(list: Competition[], today: Date): Competition[] {
-  const rank = (c: Competition) => (hasEnded(c, today) ? 2 : c.area_name === 'Brazil' ? 0 : 1)
-  return [...list].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'pt-BR'))
+// Running seasons only, Brazilian ones on top, then by name.
+export function offeredCompetitions(list: Competition[], today: Date): Competition[] {
+  const rank = (c: Competition) => (c.area_name === 'Brazil' ? 0 : 1)
+  return list
+    .filter((c) => !hasEnded(c, today))
+    .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, 'pt-BR'))
 }
