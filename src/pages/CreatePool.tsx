@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { useAuth } from '../auth/context'
-import { COMPETITION_SELECT, competitionLabel, sortCompetitions, type Competition } from '../lib/competitions'
+import { COMPETITION_SELECT, competitionLabel, offeredCompetitions, type Competition } from '../lib/competitions'
 import { firstOpenMatchday } from '../lib/matches'
 import { QuestionFields, type QuestionForm } from '../components/QuestionFields'
 import { QUESTION_TEMPLATES, toLocalInput, validateDraft } from '../lib/questions'
@@ -24,7 +24,6 @@ export default function CreatePool() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [today] = useState(() => new Date())
   const competition = competitions?.find((c) => c.id === competitionId) ?? null
   const ruleOptions = useMemo(() => ruleOptionsFor(competition?.type ?? 'LEAGUE'), [competition])
 
@@ -34,7 +33,7 @@ export default function CreatePool() {
       .select(COMPETITION_SELECT)
       .not('current_season', 'is', null)
       .then(({ data }) => {
-        const list = sortCompetitions((data ?? []) as Competition[], new Date())
+        const list = offeredCompetitions((data ?? []) as Competition[], new Date())
         setCompetitions(list)
         if (list.length > 0) chooseCompetition(list[0])
       })
@@ -152,7 +151,7 @@ export default function CreatePool() {
             Campeonato
             <select value={competitionId ?? ''} onChange={(e) => chooseCompetition(competitions.find((c) => c.id === Number(e.target.value))!)}>
               {competitions.map((c) => (
-                <option key={c.id} value={c.id}>{competitionLabel(c, today)}</option>
+                <option key={c.id} value={c.id}>{competitionLabel(c)}</option>
               ))}
             </select>
           </label>
