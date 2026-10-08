@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { canPromptInstall, isInstalled, isIos, onInstallPromptChange, promptInstall } from '../lib/install'
+import { canPromptInstall, isAndroid, isInstalled, isIos, onInstallPromptChange, promptInstall } from '../lib/install'
 
 const DISMISSED_KEY = 'install-help-dismissed'
 
@@ -34,7 +34,10 @@ export default function InstallHelp() {
 
   if (hidden) return null
   const ios = isIos()
-  if (!ios && !canPrompt) return null // desktop, or a browser that can't install
+  // Android browsers that never offer the install dialog (Brave, or Chrome
+  // after it was dismissed) still install from their menu.
+  const manual = !ios && !canPrompt && isAndroid()
+  if (!ios && !canPrompt && !manual) return null // desktop
 
   return (
     <section className="card">
@@ -44,6 +47,12 @@ export default function InstallHelp() {
           <li>No Safari, toque em <strong>Compartilhar</strong> (o quadrado com a seta para cima).</li>
           <li>Escolha <strong>Adicionar à Tela de Início</strong>.</li>
           <li>Toque em <strong>Adicionar</strong>. O Bolão vira um ícone, como um app.</li>
+        </ol>
+      ) : manual ? (
+        <ol className="steps">
+          <li>Abra o menu do navegador (⋮ no Chrome, ≡ ou ⋯ no Brave).</li>
+          <li>Toque em <strong>Instalar app</strong> ou <strong>Adicionar à tela inicial</strong>.</li>
+          <li>Confirme. O Bolão vira um ícone, como um app.</li>
         </ol>
       ) : (
         <>
