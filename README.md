@@ -122,6 +122,9 @@ calls it every 10 minutes, and each run:
    on: at most one a day, when a match they have not predicted starts within
    3 hours. The VAPID key pair push services require is created on the first
    run and kept in the `push_config` table, so there is no key to set up.
+7. Sends each pool's round summary to the same people when a round ends
+   (every match played, postponed ones aside): their points in the round and
+   their new position. Once per pool and round.
 
 When a match finishes, the database computes the points by itself. ESPN's API
 is unofficial: if it stops answering, fixtures and results keep working and

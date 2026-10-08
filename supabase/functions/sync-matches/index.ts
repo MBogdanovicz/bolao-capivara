@@ -10,7 +10,8 @@
 //   5. when a season ends, answers its automatic bonus questions (champion,
 //      top N, relegated, top scorer; see bonus.ts);
 //   6. sends prediction reminders by push notification (push.ts), creating
-//      the VAPID key pair on the first run.
+//      the VAPID key pair on the first run;
+//   7. sends the end-of-round summary of each pool (summaries.ts).
 //
 // Secrets (Edge Functions > Secrets): FOOTBALL_DATA_API_KEY and CRON_SECRET.
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
@@ -20,8 +21,9 @@ import { type ApiStandingsResponse, type AutoKind, type EspnStatisticsResponse, 
 import {
   ESPN_LEAGUES, type FdMatch, espnDate, espnGet, eventsOf, pairTeams, rosterOf, teamLook,
 } from './espn.ts'
-import { type EcKeys, type Subscription, generateKeys, sendPush } from './push.ts'
+import { type EcKeys, type Notice, type Subscription, generateKeys, sendPush } from './push.ts'
 import { type ReminderRow, reminderNotices } from './reminders.ts'
+import { type SummaryRow, summaryNotices } from './summaries.ts'
 import {
   type ApiCompetitionListItem, type ApiMatchesResponse, competitionRow, mapStatus, matchResult, seasonOf, teamsOf,
 } from './mapping.ts'
@@ -119,8 +121,13 @@ Deno.serve(async (req) => {
     results.push({ resolve: `${s.code}/${s.season}`, ...(await resolveSeason(db, s, standings)) })
   }
 
-  // 6. Prediction reminders.
-  results.push(...(await sendReminders(db)))
+  // 6. Prediction reminders and 7. round summaries.
+  const vapid = await vapidKeys(db)
+  if ('error' in vapid) results.push({ step: 'push', error: vapid.error })
+  else {
+    results.push(...(await sendReminders(db, vapid)))
+    results.push(...(await sendSummaries(db, vapid)))
+  }
 
   const failed = results.some((r) => 'error' in r)
   return json({ results, requests: MAX_REQUESTS - budget }, failed ? 502 : 200)
@@ -303,34 +310,63 @@ async function saveSquad(db: any, team: { id: number; espn_id: string; espn_leag
   return { players: players.length }
 }
 
+// The VAPID key pair, created on the first run.
 // deno-lint-ignore no-explicit-any
-async function sendReminders(db: any): Promise<Record<string, unknown>[]> {
+async function vapidKeys(db: any): Promise<EcKeys | { error: string }> {
   const { data: config } = await db.from('push_config').select('vapid_public, vapid_private').eq('id', 1).maybeSingle()
-  let vapid: EcKeys
-  if (config) vapid = { publicKey: config.vapid_public, privateKey: config.vapid_private }
-  else {
-    vapid = await generateKeys()
-    const { error } = await db.from('push_config').insert({ id: 1, vapid_public: vapid.publicKey, vapid_private: vapid.privateKey })
-    if (error) return [{ step: 'reminders', error: error.message }]
-  }
+  if (config) return { publicKey: config.vapid_public, privateKey: config.vapid_private }
+  const vapid = await generateKeys()
+  const { error } = await db.from('push_config').insert({ id: 1, vapid_public: vapid.publicKey, vapid_private: vapid.privateKey })
+  return error ? { error: error.message } : vapid
+}
 
+// Sends each notice to every device of its person. Returns how many pushes
+// were accepted; subscriptions the push service no longer knows are deleted.
+// deno-lint-ignore no-explicit-any
+async function pushAll(db: any, vapid: EcKeys, notices: { user_id: string; notice: Notice }[]) {
+  const users = [...new Set(notices.map((n) => n.user_id))]
+  const { data: subs } = await db.from('push_subscriptions').select('endpoint, user_id, p256dh, auth').in('user_id', users)
+  let sent = 0
+  const gone: string[] = []
+  for (const sub of (subs ?? []) as (Subscription & { user_id: string })[]) {
+    for (const { notice } of notices.filter((n) => n.user_id === sub.user_id)) {
+      const status = await sendPush(sub, notice, vapid, PUSH_SUBJECT).catch(() => 0)
+      if (status >= 200 && status < 300) sent++
+      else if (status === 404 || status === 410) {
+        gone.push(sub.endpoint)
+        break
+      }
+    }
+  }
+  if (gone.length) await db.from('push_subscriptions').delete().in('endpoint', gone)
+  return { sent, expired: gone.length }
+}
+
+// deno-lint-ignore no-explicit-any
+async function sendReminders(db: any, vapid: EcKeys): Promise<Record<string, unknown>[]> {
   const { data: due, error } = await db.rpc('reminders_due')
   if (error) return [{ step: 'reminders', error: error.message }]
   const notices = reminderNotices(due as ReminderRow[])
   if (notices.size === 0) return []
 
   const users = [...notices.keys()]
-  const { data: subs } = await db.from('push_subscriptions').select('endpoint, user_id, p256dh, auth').in('user_id', users)
-  let sent = 0
-  const gone: string[] = []
-  for (const sub of (subs ?? []) as (Subscription & { user_id: string })[]) {
-    const status = await sendPush(sub, notices.get(sub.user_id)!, vapid, PUSH_SUBJECT).catch(() => 0)
-    if (status >= 200 && status < 300) sent++
-    else if (status === 404 || status === 410) gone.push(sub.endpoint)
-  }
-  if (gone.length) await db.from('push_subscriptions').delete().in('endpoint', gone)
+  const result = await pushAll(db, vapid, users.map((user_id) => ({ user_id, notice: notices.get(user_id)! })))
   // Reminded once a day, even if a push service failed, so nobody gets spammed by retries.
   const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
   await db.from('reminders_sent').upsert(users.map((user_id) => ({ user_id, day })), { ignoreDuplicates: true })
-  return [{ step: 'reminders', people: users.length, sent, expired: gone.length }]
+  return [{ step: 'reminders', people: users.length, ...result }]
+}
+
+// deno-lint-ignore no-explicit-any
+async function sendSummaries(db: any, vapid: EcKeys): Promise<Record<string, unknown>[]> {
+  const { data: due, error } = await db.rpc('round_summaries_due')
+  if (error) return [{ step: 'summaries', error: error.message }]
+  const rows = due as SummaryRow[]
+  if (rows.length === 0) return []
+
+  const result = await pushAll(db, vapid, summaryNotices(rows))
+  // Every round that ended is marked, including people without notifications.
+  const rounds = [...new Map(rows.map((r) => [`${r.pool_id}/${r.matchday}`, { pool_id: r.pool_id, matchday: r.matchday }])).values()]
+  await db.from('round_summaries_sent').upsert(rounds, { ignoreDuplicates: true })
+  return [{ step: 'summaries', rounds: rounds.length, ...result }]
 }

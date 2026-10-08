@@ -3,7 +3,7 @@ import {
   MATCH_SELECT, currentMatchday, formatKickoff, hasStarted, isLive, teamName, type Match, type Team,
 } from '../../lib/matches'
 import {
-  draftFrom, firstOf, rowsToSave, type Draft, type SavedPrediction,
+  draftFrom, firstOf, rowsToSave, stepGoals, type Draft, type SavedPrediction,
 } from '../../lib/predictions'
 import { RULE_LABELS, isKnockoutStage, pointsOf, type PointsRuleType } from '../../lib/rules'
 import { supabase } from '../../lib/supabase'
@@ -168,6 +168,20 @@ function Crest({ team }: { team: Team | null }) {
   return team?.crest_url ? <img className="crest" src={team.crest_url} alt="" loading="lazy" /> : <span className="crest" />
 }
 
+// Goals of one team: type the number, or tap + and −.
+function GoalsField({ team, value, onChange }: { team: Team | null; value: string; onChange: (value: string) => void }) {
+  const name = teamName(team)
+  return (
+    <span className="goals">
+      <button type="button" className="step" aria-label={`Mais um gol ${name}`} onClick={() => onChange(stepGoals(value, 1))}>+</button>
+      <input inputMode="numeric" maxLength={2} aria-label={`Gols ${name}`} value={value}
+        onChange={(e) => onChange(e.target.value.replace(/\D/g, ''))} />
+      <button type="button" className="step" aria-label={`Menos um gol ${name}`} disabled={value === '0'}
+        onClick={() => onChange(stepGoals(value, -1))}>−</button>
+    </span>
+  )
+}
+
 function MatchCard({ match, draft, saved, started, showKnockout, poolId, nicknames, userId, onEdit }: CardProps) {
   const [others, setOthers] = useState<SavedPrediction[] | null>(null)
   const [user, setUser] = useState<Record<number, string>>({})
@@ -197,11 +211,9 @@ function MatchCard({ match, draft, saved, started, showKnockout, poolId, nicknam
           <span className="score">{hasResult ? `${match.home_score} × ${match.away_score}` : '×'}</span>
         ) : (
           <span className="score-inputs">
-            <input inputMode="numeric" maxLength={2} aria-label={`Gols ${teamName(match.home_team)}`} value={draft.home}
-              onChange={(e) => onEdit({ home: e.target.value.replace(/\D/g, '') })} />
+            <GoalsField team={match.home_team} value={draft.home} onChange={(home) => onEdit({ home })} />
             <span>×</span>
-            <input inputMode="numeric" maxLength={2} aria-label={`Gols ${teamName(match.away_team)}`} value={draft.away}
-              onChange={(e) => onEdit({ away: e.target.value.replace(/\D/g, '') })} />
+            <GoalsField team={match.away_team} value={draft.away} onChange={(away) => onEdit({ away })} />
           </span>
         )}
         <span className="team"><Crest team={match.away_team} /><span>{teamName(match.away_team)}</span></span>

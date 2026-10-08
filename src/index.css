@@ -241,3 +241,15 @@ button.secondary.danger { color: var(--danger); }
 @media (prefers-color-scheme: dark) {
   .google-button { background: #131314; color: #e3e3e3; border: 1px solid #8e918f; } /* dark theme */
 }
+
+.rules { display: flex; flex-direction: column; gap: 8px; }
+.rules h3 { margin: 8px 0 0; font-family: var(--display); font-size: 1.05rem; }
+.rules h3:first-child { margin-top: 0; }
+.rule-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.rule-list li { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.rule-list li > span:first-child { display: flex; flex-direction: column; gap: 2px; }
+.rule-list small { color: var(--muted); }
+.rule-points { font-family: var(--display); font-weight: 700; color: var(--brand-ink); white-space: nowrap; }
+.goals { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+button.step { width: 48px; height: 32px; padding: 0; background: var(--surface); color: var(--text); font-size: 1.2rem; line-height: 1; border-radius: 8px; }
+.share { margin-top: 12px; }

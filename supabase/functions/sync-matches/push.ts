@@ -103,7 +103,7 @@ export async function vapidAuthorization(endpoint: string, vapid: EcKeys, subjec
   return `vapid t=${header}.${claims}.${b64url(signature)}, k=${vapid.publicKey}`
 }
 
-export type Notice = { title: string; body: string; url: string }
+export type Notice = { title: string; body: string; url: string; tag?: string }
 
 // Sends one notification. Returns the push service's status: 201 when
 // accepted; 404 and 410 mean the subscription is gone and should be deleted.
