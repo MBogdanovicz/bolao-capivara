@@ -3,7 +3,7 @@ import { PlayerPicker } from '../../components/PlayerPicker'
 import { QuestionFields, type QuestionForm } from '../../components/QuestionFields'
 import { teamName, teamsIn, type Match, type Team } from '../../lib/matches'
 import {
-  QUESTION_TEMPLATES, isTeamQuestion, normalizeAnswer, toLocalInput, validateDraft, type QuestionKind,
+  QUESTION_TEMPLATES, canAddKind, isAutomatic, isTeamQuestion, normalizeAnswer, toLocalInput, validateDraft, type QuestionKind,
 } from '../../lib/questions'
 import { supabase } from '../../lib/supabase'
 import { usePool } from './context'
@@ -115,7 +115,7 @@ export default function Bonus() {
         ) : (
           <div className="chips">
             {QUESTION_TEMPLATES.map((t) => (
-              <button key={t.kind} type="button" className="chip" onClick={() => setAdding({
+              <button key={t.kind} type="button" className="chip" disabled={!canAddKind(t.kind, questions.map((q) => q.kind))} onClick={() => setAdding({
                 kind: t.kind, prompt: t.prompt, answerCount: t.answerCount, points: t.points,
                 closesAt: toLocalInput(new Date(Date.now() + 7 * 86_400_000).toISOString()),
               })}>+ {t.label}</button>
@@ -236,7 +236,11 @@ function QuestionCard({ question: q, mine, teams, teamNames, nicknames, userId, 
         </>
       )}
 
-      {isOwner && closed && (
+      {closed && !q.official_answer && isAutomatic(q.kind) && (
+        <p className="hint">A resposta oficial sai automaticamente quando o campeonato terminar.</p>
+      )}
+
+      {isOwner && closed && !isAutomatic(q.kind) && (
         official === null ? (
           <button type="button" className="link" onClick={async () => {
             if (!teamQuestion && !all) await loadAll()

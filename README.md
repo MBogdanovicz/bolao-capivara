@@ -114,6 +114,10 @@ calls it every 10 minutes, and each run:
    which has Portuguese names and current crests.
 4. Fetches from ESPN, once a week per team, the squads used by the top scorer
    question.
+5. When a season ends (every match finished), answers the pools' automatic
+   bonus questions: champion, top N and relegated from football-data.org's
+   final table (or the final, in cups), and top scorer from ESPN's goal
+   leaders. Pool owners only answer free questions.
 
 When a match finishes, the database computes the points by itself. ESPN's API
 is unofficial: if it stops answering, fixtures and results keep working and

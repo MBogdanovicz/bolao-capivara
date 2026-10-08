@@ -1,6 +1,5 @@
 // Bonus questions (pool_questions). Team questions store team ids as strings;
-// text questions store what people typed, and the owner picks which answers
-// count as right.
+// text questions store what people typed (or the player picked from a list).
 
 export type QuestionKind = 'champion' | 'relegated' | 'top_n' | 'top_scorer' | 'free'
 
@@ -25,8 +24,19 @@ export function isTeamQuestion(kind: QuestionKind): boolean {
   return kind === 'champion' || kind === 'relegated' || kind === 'top_n'
 }
 
-// Text answers are compared exactly by the database, so trim and collapse
-// spaces before saving.
+// Champion, relegated, top N and top scorer are answered automatically from
+// the API when the season ends; free questions are answered by the owner.
+export function isAutomatic(kind: QuestionKind): boolean {
+  return kind !== 'free'
+}
+
+// A pool has at most one question of each kind, except free questions.
+export function canAddKind(kind: QuestionKind, existing: QuestionKind[]): boolean {
+  return kind === 'free' || !existing.includes(kind)
+}
+
+// The database compares text answers ignoring case and outer spaces; collapse
+// inner spaces too before saving.
 export function cleanTextAnswer(text: string): string {
   return text.trim().replace(/\s+/g, ' ')
 }

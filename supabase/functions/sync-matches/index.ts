@@ -6,12 +6,15 @@
 //      a match in progress, or over 6 hours since the last fetch), at most
 //      MAX_REQUESTS football-data.org calls in all;
 //   3. pairs new teams with ESPN teams through a few days of fixtures;
-//   4. fetches from ESPN the squads that are due (squads_due()).
+//   4. fetches from ESPN the squads that are due (squads_due());
+//   5. when a season ends, answers its automatic bonus questions (champion,
+//      top N, relegated, top scorer; see bonus.ts).
 //
 // Secrets (Edge Functions > Secrets): FOOTBALL_DATA_API_KEY and CRON_SECRET.
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
 
 import { createClient } from '@supabase/supabase-js'
+import { type ApiStandingsResponse, type AutoKind, officialAnswer, tableOf, topScorersOf } from './bonus.ts'
 import {
   ESPN_LEAGUES, ESPN_URL, type FdMatch, espnDate, eventsOf, pairTeams, rosterOf, teamLook,
 } from './espn.ts'
@@ -101,6 +104,15 @@ Deno.serve(async (req) => {
     results.push({ team: t.id, ...(await saveSquad(db, t)) })
   }
 
+  // 5. Bonus questions of seasons that just ended.
+  const { data: seasons, error: seasonErr } = await db.rpc('seasons_to_resolve')
+  if (seasonErr) return json({ error: seasonErr.message }, 500)
+  for (const s of seasons as Season[]) {
+    if (s.type === 'LEAGUE' && budget <= 0) break
+    const standings = s.type === 'LEAGUE' ? await api(`/competitions/${s.code}/standings?season=${s.season}`) : null
+    results.push({ resolve: `${s.code}/${s.season}`, ...(await resolveSeason(db, s, standings)) })
+  }
+
   const failed = results.some((r) => 'error' in r)
   return json({ results, requests: MAX_REQUESTS - budget }, failed ? 502 : 200)
 })
@@ -162,6 +174,54 @@ async function save(db: any, data: ApiMatchesResponse) {
   if (matchErr) return { error: matchErr.message }
   await db.from('competitions').update({ synced_at: new Date().toISOString() }).eq('id', competition.id)
   return { season, teams: teamId.size, matches: rows.length }
+}
+
+type Season = { competition_id: number; code: string; type: string; season: number }
+
+// Sets the official answer of every open automatic question of a finished
+// season; the database then gives out the points.
+// deno-lint-ignore no-explicit-any
+async function resolveSeason(db: any, s: Season, standings: Response | null) {
+  if (standings && !standings.ok) return { error: `football-data.org responded ${standings.status}` }
+  const apiTable = standings ? tableOf((await standings.json()) as ApiStandingsResponse) : []
+
+  const { data: teams } = await db.from('teams').select('id, api_id').in('api_id', apiTable)
+  const idOf = new Map<number, number>((teams ?? []).map((t: { id: number; api_id: number }) => [t.api_id, t.id]))
+  const table = apiTable.map((apiId) => idOf.get(apiId)).filter((id): id is number => id != null)
+
+  const { data: final } = await db
+    .from('matches')
+    .select('advancing_team_id')
+    .eq('competition_id', s.competition_id)
+    .eq('season', s.season)
+    .eq('stage', 'FINAL')
+    .maybeSingle()
+
+  let scorers: string[] = []
+  const league = ESPN_LEAGUES[s.code]
+  if (league) {
+    const res = await fetch(`${ESPN_URL}/${league}/statistics?lang=pt&region=br`)
+    if (res.ok) scorers = topScorersOf(await res.json())
+  }
+
+  const outcome = { table, champion: final?.advancing_team_id ?? null, scorers }
+  const { data: questions, error } = await db
+    .from('pool_questions')
+    .select('id, kind, answer_count, pools!inner(competition_id, season)')
+    .eq('pools.competition_id', s.competition_id)
+    .eq('pools.season', s.season)
+    .neq('kind', 'free')
+    .is('official_answer', null)
+  if (error) return { error: error.message }
+
+  let answered = 0
+  for (const q of questions as { id: number; kind: AutoKind; answer_count: number }[]) {
+    const answer = officialAnswer(q.kind, q.answer_count, outcome)
+    if (!answer) continue
+    const { error } = await db.from('pool_questions').update({ official_answer: answer }).eq('id', q.id)
+    if (!error) answered++
+  }
+  return { answered, open: questions.length - answered }
 }
 
 type UnpairedRow = {

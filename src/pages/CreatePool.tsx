@@ -4,7 +4,7 @@ import { useAuth } from '../auth/context'
 import { COMPETITION_SELECT, competitionLabel, offeredCompetitions, type Competition } from '../lib/competitions'
 import { firstOpenMatchday } from '../lib/matches'
 import { QuestionFields, type QuestionForm } from '../components/QuestionFields'
-import { QUESTION_TEMPLATES, toLocalInput, validateDraft } from '../lib/questions'
+import { QUESTION_TEMPLATES, canAddKind, toLocalInput, validateDraft } from '../lib/questions'
 import { buildRules, ruleOptionsFor, type PointsRuleType } from '../lib/rules'
 import { supabase } from '../lib/supabase'
 
@@ -18,6 +18,7 @@ export default function CreatePool() {
   const [competitionId, setCompetitionId] = useState<number | null>(null)
   const [slots, setSlots] = useState<MatchSlot[]>([])
   const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
   const [firstMatchday, setFirstMatchday] = useState<number | null>(null)
   const [points, setPoints] = useState<Partial<Record<PointsRuleType, number>>>({})
   const [questions, setQuestions] = useState<QuestionForm[]>([])
@@ -95,6 +96,7 @@ export default function CreatePool() {
       .from('pools')
       .insert({
         name: name.trim(),
+        description: description.trim() || null,
         competition_id: competition.id,
         season: competition.current_season,
         owner_id: session.user.id,
@@ -148,6 +150,12 @@ export default function CreatePool() {
           </label>
 
           <label>
+            Informações para os participantes (opcional)
+            <textarea maxLength={1000} rows={3} value={description} onChange={(e) => setDescription(e.target.value)}
+              placeholder="Ex.: R$ 20 para participar, pix para fulano. O primeiro leva 70%." />
+          </label>
+
+          <label>
             Campeonato
             <select value={competitionId ?? ''} onChange={(e) => chooseCompetition(competitions.find((c) => c.id === Number(e.target.value))!)}>
               {competitions.map((c) => (
@@ -197,7 +205,8 @@ export default function CreatePool() {
             ))}
             <div className="chips">
               {QUESTION_TEMPLATES.map((t, i) => (
-                <button key={t.kind} type="button" className="chip" onClick={() => addQuestion(i)}>+ {t.label}</button>
+                <button key={t.kind} type="button" className="chip" onClick={() => addQuestion(i)}
+                  disabled={!canAddKind(t.kind, questions.map((q) => q.kind))}>+ {t.label}</button>
               ))}
             </div>
           </fieldset>
