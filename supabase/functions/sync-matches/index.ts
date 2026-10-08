@@ -11,7 +11,8 @@
 //      top N, relegated, top scorer; see bonus.ts);
 //   6. sends prediction reminders by push notification (push.ts), creating
 //      the VAPID key pair on the first run;
-//   7. sends the end-of-round summary of each pool (summaries.ts).
+//   7. sends the end-of-round summary of each pool (summaries.ts);
+//   8. makes the Capivara's predictions for the next 2 days (capivara.ts).
 //
 // Secrets (Edge Functions > Secrets): FOOTBALL_DATA_API_KEY and CRON_SECRET.
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
@@ -24,6 +25,7 @@ import {
 import { type EcKeys, type Notice, type Subscription, generateKeys, sendPush } from './push.ts'
 import { type ReminderRow, reminderNotices } from './reminders.ts'
 import { type SummaryRow, summaryNotices } from './summaries.ts'
+import { type Fixture, type Result, guess } from './capivara.ts'
 import {
   type ApiCompetitionListItem, type ApiMatchesResponse, competitionRow, mapStatus, matchResult, seasonOf, teamsOf,
 } from './mapping.ts'
@@ -128,6 +130,9 @@ Deno.serve(async (req) => {
     results.push(...(await sendReminders(db, vapid)))
     results.push(...(await sendSummaries(db, vapid)))
   }
+
+  // 8. The Capivara's predictions.
+  results.push(...(await capivaraPredictions(db)))
 
   const failed = results.some((r) => 'error' in r)
   return json({ results, requests: MAX_REQUESTS - budget }, failed ? 502 : 200)
@@ -369,4 +374,39 @@ async function sendSummaries(db: any, vapid: EcKeys): Promise<Record<string, unk
   const rounds = [...new Map(rows.map((r) => [`${r.pool_id}/${r.matchday}`, { pool_id: r.pool_id, matchday: r.matchday }])).values()]
   await db.from('round_summaries_sent').upsert(rounds, { ignoreDuplicates: true })
   return [{ step: 'summaries', rounds: rounds.length, ...result }]
+}
+
+// deno-lint-ignore no-explicit-any
+async function capivaraPredictions(db: any): Promise<Record<string, unknown>[]> {
+  const { data: due, error } = await db.rpc('capivara_due')
+  if (error) return [{ step: 'capivara', error: error.message }]
+  const fixtures = due as (Fixture & { competition_id: number; season: number })[]
+  if (fixtures.length === 0) return []
+
+  // This season's results of each competition involved.
+  const seasons = new Map<string, Result[]>()
+  for (const f of fixtures) {
+    const key = `${f.competition_id}/${f.season}`
+    if (seasons.has(key)) continue
+    const { data, error } = await db
+      .from('matches')
+      .select('home_team_id, away_team_id, home_score, away_score')
+      .eq('competition_id', f.competition_id)
+      .eq('season', f.season)
+      .eq('status', 'finished')
+      .not('home_score', 'is', null)
+    if (error) return [{ step: 'capivara', error: error.message }]
+    seasons.set(key, data as Result[])
+  }
+
+  const { data: bot } = await db.rpc('capivara_id')
+  const rows = fixtures.map((f) => ({
+    pool_id: f.pool_id,
+    user_id: bot,
+    match_id: f.match_id,
+    ...guess(f, seasons.get(`${f.competition_id}/${f.season}`)!),
+  }))
+  const { error: insertErr } = await db.from('predictions').upsert(rows, { onConflict: 'pool_id,user_id,match_id', ignoreDuplicates: true })
+  if (insertErr) return [{ step: 'capivara', error: insertErr.message }]
+  return [{ step: 'capivara', predictions: rows.length }]
 }

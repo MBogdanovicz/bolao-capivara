@@ -471,3 +471,33 @@ set role authenticated;
 select pg_temp.fails($$select public.round_summaries_due()$$, 'users cannot call round_summaries_due');
 reset role;
 \echo 'round summary ok'
+
+-- ---------------------------------------------------------------------------
+-- 13. The Capivara
+-- ---------------------------------------------------------------------------
+select pg_temp.check((select nickname = 'Capivara' and is_bot and avatar_url = '/capivara.svg' from public.profiles where id = public.capivara_id()),
+  'the Capivara has its profile');
+delete from public.round_summaries_sent;
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+insert into public.pools (name, competition_id, season, owner_id, scoring_rules, with_capivara)
+values ('Com Capivara', 1, 2026, auth.uid(), '[{"type":"exact_score","points":10}]', true);
+select set_config('test.capivara_pool', (select id::text from public.pools where name = 'Com Capivara'), false);
+select pg_temp.check((select count(*) from public.pool_members where pool_id = current_setting('test.capivara_pool')::uuid
+  and user_id = public.capivara_id() and role = 'member') = 1, 'a pool created with the Capivara has it as a member');
+select pg_temp.check(not exists (select 1 from public.pool_members where pool_id = current_setting('test.pool')::uuid
+  and user_id = public.capivara_id()), 'pools are created without it by default');
+select pg_temp.fails($$select public.capivara_due()$$, 'users cannot call capivara_due');
+reset role;
+
+select pg_temp.check((select array_agg(m.api_id) from public.capivara_due() d join public.matches m on m.id = d.match_id) = '{204}',
+  'the Capivara predicts matches starting in the next 2 days');
+insert into public.predictions (pool_id, user_id, match_id, home_score, away_score)
+select pool_id, public.capivara_id(), match_id, 1, 0 from public.capivara_due();
+select pg_temp.check(not exists (select 1 from public.capivara_due()), 'each match is predicted once');
+
+set role authenticated;
+delete from public.pool_members where user_id = public.capivara_id();
+reset role;
+select pg_temp.check(not exists (select 1 from public.pool_members where user_id = public.capivara_id()), 'the owner can remove the Capivara');
+\echo 'capivara ok'

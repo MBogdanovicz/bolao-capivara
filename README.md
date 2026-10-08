@@ -125,6 +125,10 @@ calls it every 10 minutes, and each run:
 7. Sends each pool's round summary to the same people when a round ends
    (every match played, postponed ones aside): their points in the round and
    their new position. Once per pool and round.
+8. Makes the Capivara's predictions, in pools created with it, for matches
+   starting in the next 2 days. Each team's attack and defense come from this
+   season's results; the score is drawn from the expected goals, so favourites
+   usually win but upsets happen.
 
 When a match finishes, the database computes the points by itself. ESPN's API
 is unofficial: if it stops answering, fixtures and results keep working and

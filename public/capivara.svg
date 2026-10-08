@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- The Capivara bot's avatar: a chill cartoon capybara with the classic
+       tangerine on its head, on the club's green. -->
+  <circle cx="64" cy="64" r="64" fill="#3fcf6a"/>
+  <!-- small ears on top -->
+  <ellipse cx="31" cy="31" rx="7" ry="6" fill="#6b4022"/>
+  <ellipse cx="97" cy="31" rx="7" ry="6" fill="#6b4022"/>
+  <!-- tall, boxy head -->
+  <path d="M30 40 Q30 24 48 24 L80 24 Q98 24 98 40 L100 92 Q100 118 64 118 Q28 118 28 92 Z" fill="#9c6236"/>
+  <!-- big blunt snout -->
+  <path d="M34 78 Q34 64 52 64 L76 64 Q94 64 94 78 L94 96 Q94 116 64 116 Q34 116 34 96 Z" fill="#b97a48"/>
+  <!-- sleepy, relaxed eyes -->
+  <path d="M38 50 Q45 45 52 50" fill="none" stroke="#2a1a0e" stroke-width="4" stroke-linecap="round"/>
+  <path d="M76 50 Q83 45 90 50" fill="none" stroke="#2a1a0e" stroke-width="4" stroke-linecap="round"/>
+  <!-- nostrils on top of the snout -->
+  <ellipse cx="55" cy="74" rx="4.5" ry="3" fill="#2a1a0e"/>
+  <ellipse cx="73" cy="74" rx="4.5" ry="3" fill="#2a1a0e"/>
+  <!-- little smile -->
+  <path d="M56 94 Q64 100 72 94" fill="none" stroke="#2a1a0e" stroke-width="3" stroke-linecap="round"/>
+  <!-- tangerine -->
+  <circle cx="64" cy="17" r="11" fill="#ff9b1f"/>
+  <path d="M64 7 Q70 2 76 5 Q71 10 64 8 Z" fill="#1f8a3b"/>
+</svg>
