@@ -348,3 +348,35 @@ reset role;
 select pg_temp.check((select description from public.pools) = 'R$ 20 por pessoa', 'members cannot edit the description');
 select pg_temp.check((select count(*) from public.pool_members) = 1, 'a member leaves the pool');
 \echo 'management ok'
+
+-- ---------------------------------------------------------------------------
+-- 9. Push reminders
+-- ---------------------------------------------------------------------------
+update public.matches set kickoff_at = now() + interval '30 seconds' where id = 2;
+update public.matches set kickoff_at = now() + interval '40 seconds', status = 'scheduled' where api_id = 103;
+insert into public.push_config (vapid_public, vapid_private) values ('BPUB', 'secret');
+select pg_temp.check(not exists (select 1 from public.reminders_due()), 'no reminder without notifications on');
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.check(public.vapid_public_key() = 'BPUB', 'users read the VAPID public key');
+select pg_temp.check(not exists (select 1 from public.push_config), 'users cannot read the VAPID private key');
+select pg_temp.fails($$select public.reminders_due()$$, 'users cannot call reminders_due');
+select public.save_push_subscription('https://push.example/1', 'p', 'a');
+select pg_temp.check((select count(*) from public.push_subscriptions) = 1, 'users save and see their subscription');
+reset role;
+
+select pg_temp.check((select array_agg(missing) from public.reminders_due()
+  where user_id = '00000000-0000-0000-0000-00000000000a') = '{2}', 'reminds of the unpredicted matches today');
+insert into public.reminders_sent values ('00000000-0000-0000-0000-00000000000a', (now() at time zone 'America/Sao_Paulo')::date);
+select pg_temp.check(not exists (select 1 from public.reminders_due()), 'one reminder per day');
+delete from public.reminders_sent;
+update public.matches set kickoff_at = now() + interval '4 hours' where api_id in (102, 103);
+select pg_temp.check(not exists (select 1 from public.reminders_due()), 'no reminder while the next match is over 3 hours away');
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false);
+select public.save_push_subscription('https://push.example/1', 'p2', 'a2');
+select pg_temp.check((select user_id from public.push_subscriptions) = auth.uid(), 'a device used by someone else changes owner');
+reset role;
+\echo 'reminders ok'

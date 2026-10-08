@@ -118,6 +118,10 @@ calls it every 10 minutes, and each run:
    bonus questions: champion, top N and relegated from football-data.org's
    final table (or the final, in cups), and top scorer from ESPN's goal
    leaders. Pool owners only answer free questions.
+6. Sends prediction reminders by push notification to people who turned them
+   on: at most one a day, when a match they have not predicted starts within
+   3 hours. The VAPID key pair push services require is created on the first
+   run and kept in the `push_config` table, so there is no key to set up.
 
 When a match finishes, the database computes the points by itself. ESPN's API
 is unofficial: if it stops answering, fixtures and results keep working and

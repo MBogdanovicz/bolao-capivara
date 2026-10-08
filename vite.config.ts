@@ -9,6 +9,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
+      // Push notifications (prediction reminders) are handled in public/push-sw.js.
+      workbox: { importScripts: ['push-sw.js'] },
       manifest: {
         name: 'Bolão Capivara',
         short_name: 'Bolão',
