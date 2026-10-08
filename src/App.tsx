@@ -6,6 +6,7 @@ import JoinPool from './pages/JoinPool'
 import Login from './pages/Login'
 import MyPools from './pages/MyPools'
 import Bonus from './pages/pool/Bonus'
+import Table from './pages/pool/Table'
 import PoolLayout from './pages/pool/PoolLayout'
 import Predictions from './pages/pool/Predictions'
 import Ranking from './pages/pool/Ranking'
@@ -23,6 +24,7 @@ export default function App() {
             <Route index element={<Predictions />} />
             <Route path="ranking" element={<Ranking />} />
             <Route path="bonus" element={<Bonus />} />
+            <Route path="tabela" element={<Table />} />
           </Route>
         </Routes>
       </BrowserRouter>

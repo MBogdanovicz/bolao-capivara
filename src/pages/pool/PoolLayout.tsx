@@ -138,6 +138,7 @@ export default function PoolLayout() {
         <NavLink to="" end>Palpites</NavLink>
         <NavLink to="ranking">Ranking</NavLink>
         <NavLink to="bonus">Bônus</NavLink>
+        <NavLink to="tabela">Tabela</NavLink>
       </nav>
 
       <Outlet context={context} />
