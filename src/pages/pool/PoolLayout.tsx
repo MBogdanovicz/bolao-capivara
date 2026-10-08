@@ -5,6 +5,8 @@ import { seasonLabel } from '../../lib/competitions'
 import { describeRules } from '../../lib/rules'
 import { supabase } from '../../lib/supabase'
 import type { Member, Pool, PoolContext } from './context'
+import DescriptionEditor from './DescriptionEditor'
+import MembersCard from './MembersCard'
 
 type MemberRow = { user_id: string; role: Member['role']; profile: { nickname: string; avatar_url: string | null } | null }
 
@@ -13,7 +15,7 @@ export default function PoolLayout() {
   const { session } = useAuth()
   const [pool, setPool] = useState<Pool | null | undefined>(undefined)
   const [members, setMembers] = useState<Member[]>([])
-  const [showInvite, setShowInvite] = useState(false)
+  const [panel, setPanel] = useState<'invite' | 'members' | 'description' | null>(null)
   const [copied, setCopied] = useState(false)
 
   useEffect(() => {
@@ -53,6 +55,10 @@ export default function PoolLayout() {
   const context: PoolContext = { pool, members, userId, isOwner: pool.owner_id === userId }
   const inviteUrl = `${window.location.origin}/convite/${pool.invite_code}`
 
+  function toggle(p: typeof panel) {
+    setPanel(panel === p ? null : p)
+  }
+
   async function share() {
     const text = `Entra no bolão "${pool!.name}" no Bolão Capivara:`
     if (navigator.share) {
@@ -71,7 +77,10 @@ export default function PoolLayout() {
     <main className="page">
       <header className="bar">
         <Link to="/" aria-label="Meus bolões">‹ Bolões</Link>
-        <button type="button" className="link" onClick={() => setShowInvite(!showInvite)}>Convidar</button>
+        <span className="actions">
+          <button type="button" className="link" onClick={() => toggle('members')}>Participantes</button>
+          <button type="button" className="link" onClick={() => toggle('invite')}>Convidar</button>
+        </span>
       </header>
       <h1>{pool.name}</h1>
       <p className="hint">
@@ -80,9 +89,26 @@ export default function PoolLayout() {
         {members.length === 1 ? 'participante' : 'participantes'}
       </p>
 
-      {pool.description && <p className="description">{pool.description}</p>}
+      {panel === 'description' ? (
+        <DescriptionEditor poolId={pool.id} value={pool.description} onCancel={() => setPanel(null)}
+          onSaved={(description) => { setPool({ ...pool, description }); setPanel(null) }} />
+      ) : (
+        <>
+          {pool.description && <p className="description">{pool.description}</p>}
+          {context.isOwner && (
+            <button type="button" className="link" onClick={() => setPanel('description')}>
+              {pool.description ? 'Editar descrição' : 'Adicionar descrição'}
+            </button>
+          )}
+        </>
+      )}
 
-      {showInvite && (
+      {panel === 'members' && (
+        <MembersCard poolId={pool.id} members={members} userId={userId} isOwner={context.isOwner}
+          onRemoved={(id) => setMembers(members.filter((m) => m.user_id !== id))} />
+      )}
+
+      {panel === 'invite' && (
         <section className="card">
           <p>Mande este link para quem você quer no bolão:</p>
           <p className="invite">{inviteUrl}</p>

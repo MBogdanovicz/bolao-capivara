@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { monthLabel, periodsIn, rankPeriod, type PeriodPoints } from './ranking.ts'
+import { evolution, monthLabel, periodsIn, rankPeriod, type PeriodPoints } from './ranking.ts'
 
 const row = (user_id: string, matchday: number, month: string, points: number, exact_scores = 0, right_winners = 0): PeriodPoints =>
   ({ user_id, matchday, month, points, exact_scores, right_winners })
@@ -28,4 +28,11 @@ test('a round spanning two months adds up, and a month adds up its rounds', () =
 test('periods with points and month names', () => {
   assert.deepEqual(periodsIn(rows), { matchdays: [30, 31, 32], months: ['2026-09', '2026-10'] })
   assert.equal(monthLabel('2026-03'), 'Março de 2026')
+})
+
+test('evolution: position after each round, from the points so far', () => {
+  const e = evolution(['ana', 'bia', 'caio'], rows)
+  assert.deepEqual(e.get('ana')!.map((p) => `${p.matchday}:${p.points}:${p.position}`), ['30:10:1', '31:17:1', '32:17:1'])
+  assert.deepEqual(e.get('bia')!.map((p) => `${p.matchday}:${p.points}:${p.position}`), ['30:10:1', '31:10:2', '32:17:1'])
+  assert.deepEqual(e.get('caio')!.map((p) => p.position), [3, 3, 3])
 })

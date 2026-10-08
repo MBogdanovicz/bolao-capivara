@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { useAuth } from '../auth/context'
+import { saveNickname } from '../lib/profile'
 import { supabase } from '../lib/supabase'
 
 // Asked once, before using the app. Names are unique (ignoring case), so the
@@ -12,15 +13,12 @@ export default function ChooseName() {
 
   async function submit(e: FormEvent) {
     e.preventDefault()
-    const nickname = name.trim().replace(/\s+/g, ' ')
-    if (nickname.length < 2) return setError('Use pelo menos 2 letras.')
     setBusy(true)
     setError(null)
-    const { error } = await supabase.from('profiles').update({ nickname }).eq('id', session!.user.id)
+    const result = await saveNickname(session!.user.id, name)
     setBusy(false)
-    if (error?.code === '23505') return setError('Esse nome já está em uso. Escolha outro.')
-    if (error) return setError('Não foi possível salvar. Tente de novo.')
-    setNickname(nickname)
+    if ('error' in result) return setError(result.error)
+    setNickname(result.name)
   }
 
   return (

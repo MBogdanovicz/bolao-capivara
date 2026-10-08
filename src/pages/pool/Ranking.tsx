@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { monthLabel, periodsIn, rankPeriod, type PeriodPoints } from '../../lib/ranking'
 import { supabase } from '../../lib/supabase'
 import { usePool } from './context'
+import Evolution from './Evolution'
 
 type RankingRow = {
   user_id: string
@@ -13,12 +14,13 @@ type RankingRow = {
   position: number
 }
 
-type View = 'overall' | 'round' | 'month'
+type View = 'overall' | 'round' | 'month' | 'evolution'
 
 const VIEWS: { view: View; label: string }[] = [
   { view: 'overall', label: 'Geral' },
   { view: 'round', label: 'Rodada' },
   { view: 'month', label: 'Mês' },
+  { view: 'evolution', label: 'Evolução' },
 ]
 
 export default function Ranking() {
@@ -53,7 +55,7 @@ export default function Ranking() {
 
   const byId = Object.fromEntries(members.map((m) => [m.user_id, m]))
   let rows: RankingRow[] = overall
-  if (view !== 'overall') {
+  if (view === 'round' || view === 'month') {
     const period = view === 'round' ? (round === null ? null : { kind: 'round' as const, matchday: round })
       : currentMonth === null ? null : { kind: 'month' as const, month: currentMonth }
     rows = period === null ? [] : rankPeriod(members.map((m) => m.user_id), periodRows, period).map((r) => ({
@@ -82,7 +84,9 @@ export default function Ranking() {
         <Stepper label={monthLabel(currentMonth)} list={months} value={currentMonth} onChange={setMonth} prev="Mês anterior" next="Próximo mês" />
       )}
 
-      {rows.length === 0 ? (
+      {view === 'evolution' ? (
+        <Evolution members={members} rows={periodRows} userId={userId} />
+      ) : rows.length === 0 ? (
         <p>Nenhum jogo do bolão terminou ainda.</p>
       ) : (
         <table className="ranking">
@@ -111,10 +115,10 @@ export default function Ranking() {
           </tbody>
         </table>
       )}
-      <p className="hint">
+      {view !== 'evolution' && <p className="hint">
         Desempate: mais placares exatos, depois mais vencedores certos. Os pontos entram quando o jogo termina.
         {view !== 'overall' && ' Por rodada e por mês contam só os jogos; os bônus entram no ranking geral.'}
-      </p>
+      </p>}
     </section>
   )
 }

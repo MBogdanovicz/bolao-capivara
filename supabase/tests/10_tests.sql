@@ -302,3 +302,49 @@ select pg_temp.fails($$select public.unpaired_matches()$$, 'users cannot call un
 select pg_temp.check((select count(*) from public.players) = 0, 'users can read players');
 reset role;
 \echo 'sync ok'
+
+-- ---------------------------------------------------------------------------
+-- 8. Home screen and pool management
+-- ---------------------------------------------------------------------------
+update public.matches set status = 'scheduled', home_score = null, away_score = null, kickoff_at = now() + interval '2 days' where id = 2;
+insert into public.matches (api_id, competition_id, season, matchday, home_team_id, away_team_id, kickoff_at, status) values
+  (103, 1, 2026, 31, 1, 4, now() + interval '2 days', 'postponed'),
+  (104, 1, 2026, 33, 2, 3, now() + interval '20 days', 'scheduled');
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.check((select missing from public.my_pending_predictions()) = 1,
+  'pending: the next 7 days without a prediction, not postponed ones');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false);
+select pg_temp.check(not exists (select 1 from public.my_pending_predictions()), 'nothing pending once predicted');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000c', false);
+select pg_temp.check(not exists (select 1 from public.my_pending_predictions()), 'no pending predictions outside your pools');
+
+-- Carla joins and answers a bonus question; the owner removes her.
+select public.join_pool(current_setting('test.invite'));
+reset role;
+insert into public.question_answers (question_id, user_id, answer)
+values ((select id from public.pool_questions where kind = 'relegated'), '00000000-0000-0000-0000-00000000000c', '["Team A"]');
+set role authenticated;
+delete from public.pool_members where user_id = '00000000-0000-0000-0000-00000000000a';
+select pg_temp.check((select count(*) from public.pool_members) = 3, 'member removal by a member is ignored');
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+delete from public.pool_members where user_id = auth.uid();
+select pg_temp.check((select count(*) from public.pool_members where user_id = auth.uid()) = 1, 'the owner cannot leave');
+delete from public.pool_members where user_id = '00000000-0000-0000-0000-00000000000c';
+select pg_temp.check((select count(*) from public.pool_members) = 2, 'the owner removes a member');
+update public.pools set description = 'R$ 20 por pessoa';
+select pg_temp.check((select description from public.pools) = 'R$ 20 por pessoa', 'the owner edits the description');
+reset role;
+select pg_temp.check(not exists (select 1 from public.question_answers where user_id = '00000000-0000-0000-0000-00000000000c'),
+  'a removed member''s bonus answers go too');
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false);
+update public.pools set description = 'hacked';
+delete from public.pool_members where user_id = auth.uid();
+reset role;
+select pg_temp.check((select description from public.pools) = 'R$ 20 por pessoa', 'members cannot edit the description');
+select pg_temp.check((select count(*) from public.pool_members) = 1, 'a member leaves the pool');
+\echo 'management ok'
