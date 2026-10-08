@@ -1,17 +1,30 @@
 import { useEffect, useState } from 'react'
 import { disableReminders, enableReminders, pushSupport, remindersOn } from '../lib/push'
 
-type State = 'loading' | 'off' | 'on' | 'denied' | 'error'
+type State = 'loading' | 'off' | 'on' | 'dismissed' | 'denied' | 'error'
 
 // Home screen switch for prediction reminders on this device.
 export default function Reminders() {
   const support = pushSupport()
-  const [state, setState] = useState<State>(() => (support === 'ok' && Notification.permission === 'denied' ? 'denied' : 'loading'))
+  const [state, setState] = useState<State>('loading')
   const [busy, setBusy] = useState(false)
 
+  // Read the permission when the screen opens and again whenever the user
+  // comes back to the app (e.g. after allowing notifications in settings).
   useEffect(() => {
-    if (support !== 'ok' || Notification.permission === 'denied') return
-    remindersOn().then((on) => setState(on ? 'on' : 'off'), () => setState('off'))
+    if (support !== 'ok') return
+    let active = true
+    const check = () => {
+      if (Notification.permission === 'denied') return setState('denied')
+      remindersOn().then((on) => active && setState(on ? 'on' : 'off'), () => active && setState('off'))
+    }
+    check()
+    const onVisible = () => document.visibilityState === 'visible' && check()
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      active = false
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [support])
 
   async function enable() {
@@ -41,13 +54,24 @@ export default function Reminders() {
     )
   }
   if (state === 'denied') {
-    return <p className="hint">As notificações do Bolão estão bloqueadas. Libere nas configurações do navegador para receber lembretes.</p>
+    return (
+      <section className="card">
+        <h3>Lembretes de palpite</h3>
+        <p>As notificações do Bolão estão bloqueadas neste aparelho. Para liberar:</p>
+        <ul className="steps">
+          <li>App instalado: Configurações do Android &gt; Apps &gt; Bolão &gt; Notificações.</li>
+          <li>No Chrome: toque no ícone à esquerda do endereço &gt; Permissões &gt; Notificações.</li>
+        </ul>
+        <p className="hint">Depois, volte aqui e toque em Ativar lembretes.</p>
+      </section>
+    )
   }
   return (
     <section className="card">
       <h3>Lembretes de palpite</h3>
       <p>Receba um aviso quando faltar palpite para um jogo que começa em até 3 horas.</p>
       <button type="button" disabled={busy} onClick={enable}>Ativar lembretes</button>
+      {state === 'dismissed' && <p className="hint">O pedido de permissão foi fechado. Toque de novo e escolha Permitir.</p>}
       {state === 'error' && <p className="error">Não foi possível ativar agora. Tente de novo mais tarde.</p>}
     </section>
   )

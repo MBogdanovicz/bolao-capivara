@@ -38,11 +38,14 @@ export async function remindersOn(): Promise<boolean> {
   return true
 }
 
-export type EnableResult = 'on' | 'denied' | 'error'
+// 'dismissed': the permission prompt was closed (or the browser hid it)
+// without an answer, so asking again is still possible; 'denied' is blocked.
+export type EnableResult = 'on' | 'dismissed' | 'denied' | 'error'
 
 export async function enableReminders(): Promise<EnableResult> {
   const permission = await Notification.requestPermission()
-  if (permission !== 'granted') return 'denied'
+  if (permission === 'denied') return 'denied'
+  if (permission !== 'granted') return 'dismissed'
   try {
     const { data: key } = await supabase.rpc('vapid_public_key')
     if (!key) return 'error'
