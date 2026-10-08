@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { useAuth } from '../auth/context'
+import GoogleButton from '../components/GoogleButton'
 import { supabase } from '../lib/supabase'
 
 // Passwordless login: Google or a 6-digit code sent by email. The code is
@@ -46,44 +47,47 @@ export default function Login() {
   }
 
   return (
-    <main className="page narrow">
-      <h1>Bolão Capivara</h1>
+    <>
+      <header className="hero">
+        <img src="/crest.png" alt="Brasão do Capivara Esporte Clube" />
+        <span className="wordmark">Bolão <span>Capivara</span></span>
+        <p>Palpites, ranking e resenha com os amigos.</p>
+      </header>
+      <main className="page narrow">
+        <GoogleButton onClick={signInWithGoogle} />
 
-      <button type="button" className="secondary" onClick={signInWithGoogle}>
-        Entrar com Google
-      </button>
+        <p className="divider">ou</p>
 
-      <p className="divider">ou</p>
+        {!codeSent ? (
+          <form onSubmit={sendCode}>
+            <label>
+              E-mail
+              <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </label>
+            <button type="submit" disabled={busy}>Receber código</button>
+          </form>
+        ) : (
+          <form onSubmit={verifyCode}>
+            <p>Enviamos um código de 6 dígitos para {email}.</p>
+            <label>
+              Código
+              <input
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                required
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+              />
+            </label>
+            <button type="submit" disabled={busy}>Entrar</button>
+            <button type="button" className="link" onClick={() => setCodeSent(false)}>Usar outro e-mail</button>
+          </form>
+        )}
 
-      {!codeSent ? (
-        <form onSubmit={sendCode}>
-          <label>
-            E-mail
-            <input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </label>
-          <button type="submit" disabled={busy}>Receber código</button>
-        </form>
-      ) : (
-        <form onSubmit={verifyCode}>
-          <p>Enviamos um código de 6 dígitos para {email}.</p>
-          <label>
-            Código
-            <input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxLength={6}
-              required
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-            />
-          </label>
-          <button type="submit" disabled={busy}>Entrar</button>
-          <button type="button" className="link" onClick={() => setCodeSent(false)}>Usar outro e-mail</button>
-        </form>
-      )}
-
-      {error && <p className="error">{error}</p>}
-    </main>
+        {error && <p className="error">{error}</p>}
+      </main>
+    </>
   )
 }

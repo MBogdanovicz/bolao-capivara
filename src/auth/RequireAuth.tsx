@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate, useLocation } from 'react-router'
+import BrandBar from '../components/BrandBar'
 import ChooseName from '../pages/ChooseName'
 import { useAuth } from './context'
 
@@ -12,6 +13,6 @@ export function RequireAuth({ children }: { children: ReactNode }) {
   if (loading) return <p className="center">Carregando…</p>
   if (!session) return <Navigate to="/entrar" replace state={{ from: location.pathname }} />
   if (nickname === undefined) return <p className="center">Carregando…</p>
-  if (nickname === null) return <ChooseName />
-  return children
+  if (nickname === null) return <><BrandBar /><ChooseName /></>
+  return <><BrandBar />{children}</>
 }

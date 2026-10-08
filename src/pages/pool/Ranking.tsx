@@ -104,8 +104,10 @@ export default function Ranking() {
               <tr key={r.user_id} className={r.user_id === userId ? 'me' : undefined}>
                 <td>{r.position}º</td>
                 <td className="name">
-                  {r.avatar_url && <img className="avatar" src={r.avatar_url} alt="" referrerPolicy="no-referrer" />}
-                  {r.nickname}
+                  <span className="who">
+                    {r.avatar_url && <img className="avatar" src={r.avatar_url} alt="" referrerPolicy="no-referrer" />}
+                    {r.nickname}
+                  </span>
                 </td>
                 <td><strong>{r.total_points}</strong></td>
                 <td>{r.exact_scores}</td>
