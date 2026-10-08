@@ -1,28 +1,31 @@
 @import '@fontsource/saira/600.css';
 @import '@fontsource/saira/700.css';
 
-/* Colors of the Capivara Esporte Clube crest: black and bright green.
-   --brand is the crest green, used on black or as a fill under black text;
-   --brand-ink is a darker step of it that reads as text on light surfaces. */
+/* Colors of the Capivara Esporte Clube crest, softened for everyday use.
+   --brand is the crest's bright green, kept for the black top bar;
+   --accent is a calmer green for buttons and active controls;
+   --brand-ink is the green for text, dark enough to read on the surfaces.
+   The light theme uses a soft sage gray instead of white, to avoid glare. */
 :root {
   --brand: #00ff00;
-  --brand-ink: #087021;
-  --on-brand: #000000;
+  --accent: #3fcf6a;
+  --on-accent: #06210f;
+  --brand-ink: #0f6b2c;
   --ink: #000000;
-  --text: #111411;
-  --muted: #5d665f;
-  --bg: #f4f6f4;
-  --card: #ffffff;
-  --surface: #eceff0;
-  --border: #dde2dd;
-  --danger: #b3261e;
-  --highlight: rgb(0 255 0 / 0.14);
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.04);
-  --seg-active-bg: #000000;
-  --seg-active-fg: #00ff00;
-  --chart-focus: #087021;
-  --chart-other: #b9c1bc;
-  --chart-grid: #e3e8e5;
+  --text: #1a201c;
+  --muted: #5a645d;
+  --bg: #e4e8e1;
+  --card: #f1f3ee;
+  --surface: #d9ded5;
+  --border: #cdd3c9;
+  --danger: #a8322a;
+  --highlight: rgb(63 207 106 / 0.22);
+  --shadow: 0 1px 2px rgb(20 30 22 / 0.06);
+  --seg-active-bg: #1a201c;
+  --seg-active-fg: #8ef0a6;
+  --chart-focus: #0f6b2c;
+  --chart-other: #a9b2ab;
+  --chart-grid: #d3d9cf;
   --display: 'Saira', system-ui, sans-serif;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
@@ -32,21 +35,21 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --brand-ink: #00ff00;
-    --text: #eef2ee;
-    --muted: #9aa59c;
-    --bg: #050605;
-    --card: #111411;
-    --surface: #1b1f1b;
-    --border: #262b26;
+    --brand-ink: #5ee07f;
+    --text: #e6ebe6;
+    --muted: #97a299;
+    --bg: #0b0e0c;
+    --card: #141815;
+    --surface: #1d221e;
+    --border: #272d28;
     --danger: #f2b8b5;
-    --highlight: rgb(0 255 0 / 0.12);
+    --highlight: rgb(63 207 106 / 0.14);
     --shadow: none;
-    --seg-active-bg: #00ff00;
-    --seg-active-fg: #000000;
-    --chart-focus: #2bd94a;
+    --seg-active-bg: #3fcf6a;
+    --seg-active-fg: #06210f;
+    --chart-focus: #3fcf6a;
     --chart-other: #4a544f;
-    --chart-grid: #2a302d;
+    --chart-grid: #262c27;
   }
 }
 
@@ -65,7 +68,7 @@ body {
   display: flex; align-items: center; gap: 10px;
   padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
   background: var(--ink); color: #fff;
-  border-bottom: 2px solid var(--brand);
+  border-bottom: 2px solid var(--accent);
   text-decoration: none;
 }
 .brandbar img { width: 36px; height: 36px; }
@@ -107,8 +110,8 @@ button, .button {
   padding: 13px;
   border: none;
   border-radius: 10px;
-  background: var(--brand);
-  color: var(--on-brand);
+  background: var(--accent);
+  color: var(--on-accent);
   text-align: center;
   text-decoration: none;
   cursor: pointer;
@@ -134,7 +137,7 @@ button.link { background: none; color: var(--brand-ink); width: auto; padding: 8
 }
 .list a::after { content: '›'; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 1.5rem; font-weight: 400; }
 
-.description { white-space: pre-wrap; background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--brand); border-radius: 10px; padding: 12px; margin: 8px 0; }
+.description { white-space: pre-wrap; background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: 10px; padding: 12px; margin: 8px 0; }
 button.chip:disabled { opacity: 0.4; }
 .center-text { text-align: center; }
 
@@ -183,7 +186,7 @@ button.danger, .danger { color: var(--danger); }
 .sticky-save { position: sticky; bottom: 0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--bg) 30%); }
 
 /* Login: the crest over a black hero. */
-.hero { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: calc(40px + env(safe-area-inset-top)) 16px 32px; background: var(--ink); color: #fff; border-bottom: 3px solid var(--brand); text-align: center; }
+.hero { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: calc(40px + env(safe-area-inset-top)) 16px 32px; background: var(--ink); color: #fff; border-bottom: 3px solid var(--accent); text-align: center; }
 .hero img { width: 140px; height: 140px; }
 .hero .wordmark { font-size: 1.6rem; }
 .hero p { margin: 0; color: #c7cfc8; }
@@ -227,3 +230,14 @@ button.secondary.danger { color: var(--danger); }
 .pick { flex-direction: row; align-items: center; gap: 8px; font-weight: 600; }
 .pick select { flex: 1; }
 .bar a { text-decoration: none; font-weight: 600; }
+
+/* Google's own button colors, per its branding guidelines (not our palette). */
+.google-button {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  height: 44px; padding: 0 12px;
+  background: #f2f2f2; color: #1f1f1f; border: none; /* Google's neutral theme */
+  font-family: Roboto, system-ui, sans-serif; font-weight: 500; font-size: 14px; line-height: 20px;
+}
+@media (prefers-color-scheme: dark) {
+  .google-button { background: #131314; color: #e3e3e3; border: 1px solid #8e918f; } /* dark theme */
+}

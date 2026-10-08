@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Navigate, useLocation } from 'react-router'
 import { useAuth } from '../auth/context'
+import GoogleButton from '../components/GoogleButton'
 import { supabase } from '../lib/supabase'
 
 // Passwordless login: Google or a 6-digit code sent by email. The code is
@@ -53,9 +54,7 @@ export default function Login() {
         <p>Palpites, ranking e resenha com os amigos.</p>
       </header>
       <main className="page narrow">
-        <button type="button" className="secondary" onClick={signInWithGoogle}>
-          Entrar com Google
-        </button>
+        <GoogleButton onClick={signInWithGoogle} />
 
         <p className="divider">ou</p>
 
