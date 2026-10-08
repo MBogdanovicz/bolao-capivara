@@ -130,6 +130,7 @@ export default function PoolLayout() {
       {panel === 'rules' && (
         <section className="card">
           <RulesSummary rules={pool.scoring_rules} questions={questions} />
+          <button type="button" className="secondary" onClick={() => setPanel(null)}>Fechar regras</button>
         </section>
       )}
 
