@@ -380,3 +380,22 @@ select public.save_push_subscription('https://push.example/1', 'p2', 'a2');
 select pg_temp.check((select user_id from public.push_subscriptions) = auth.uid(), 'a device used by someone else changes owner');
 reset role;
 \echo 'reminders ok'
+
+-- ---------------------------------------------------------------------------
+-- 10. Deleting a pool
+-- ---------------------------------------------------------------------------
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false);
+select public.join_pool(current_setting('test.invite'));
+delete from public.pools;
+reset role;
+select pg_temp.check((select count(*) from public.pools) = 1, 'members cannot delete the pool');
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+delete from public.pools;
+reset role;
+select pg_temp.check(not exists (select 1 from public.pools) and not exists (select 1 from public.pool_members)
+  and not exists (select 1 from public.predictions) and not exists (select 1 from public.pool_questions),
+  'the owner deletes the pool with its members, predictions and questions');
+\echo 'delete ok'

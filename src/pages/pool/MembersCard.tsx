@@ -5,15 +5,17 @@ import type { Member } from './context'
 
 type Props = {
   poolId: string
+  poolName: string
   members: Member[]
   userId: string
   isOwner: boolean
   onRemoved: (userId: string) => void
 }
 
-// Who is in the pool. The owner removes members; members leave. Predictions
-// and bonus answers of whoever leaves are deleted with the membership.
-export default function MembersCard({ poolId, members, userId, isOwner, onRemoved }: Props) {
+// Who is in the pool. The owner removes members or deletes the whole pool;
+// members leave. Predictions and bonus answers of whoever leaves are deleted
+// with the membership.
+export default function MembersCard({ poolId, poolName, members, userId, isOwner, onRemoved }: Props) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +33,16 @@ export default function MembersCard({ poolId, members, userId, isOwner, onRemove
     if (error || !data?.length) return setError('Não foi possível. Tente de novo.')
     if (self) navigate('/', { replace: true })
     else onRemoved(member.user_id)
+  }
+
+  async function deletePool() {
+    if (!window.confirm(`Excluir o bolão "${poolName}"? Todos os palpites, bônus e o ranking serão apagados para todos. Não dá para desfazer.`)) return
+    setBusy(true)
+    setError(null)
+    const { data, error } = await supabase.from('pools').delete().eq('id', poolId).select('id')
+    setBusy(false)
+    if (error || !data?.length) return setError('Não foi possível excluir. Tente de novo.')
+    navigate('/', { replace: true })
   }
 
   const sorted = [...members].sort((a, b) => (a.role === 'owner' ? -1 : b.role === 'owner' ? 1 : a.nickname.localeCompare(b.nickname, 'pt-BR')))
@@ -55,6 +67,9 @@ export default function MembersCard({ poolId, members, userId, isOwner, onRemove
       </ul>
       {!isOwner && me && (
         <button type="button" className="secondary danger" disabled={busy} onClick={() => remove(me)}>Sair do bolão</button>
+      )}
+      {isOwner && (
+        <button type="button" className="secondary danger" disabled={busy} onClick={deletePool}>Excluir bolão</button>
       )}
       {error && <p className="error">{error}</p>}
     </section>
