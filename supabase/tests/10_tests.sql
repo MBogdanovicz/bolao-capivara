@@ -45,6 +45,18 @@ select pg_temp.check(points = 5, 'a correct draw counts as winner')
 from public.score_prediction('[{"type":"exact_score","points":10},{"type":"winner","points":5}]',
   'REGULAR_SEASON', 0, 0, 1, 1, null, null, null, null);
 
+select pg_temp.check(points = 8 and rules_hit = '{winner,goal_difference}', '2-0 for a 3-1 adds winner and goal difference')
+from public.score_prediction('[{"type":"exact_score","points":10},{"type":"winner","points":5},{"type":"goal_difference","points":3}]',
+  'REGULAR_SEASON', 2, 0, 3, 1, null, null, null, null);
+
+select pg_temp.check(points = 5 and rules_hit = '{winner}', 'a draw (1-1 for a 2-2) does not count as goal difference')
+from public.score_prediction('[{"type":"exact_score","points":10},{"type":"winner","points":5},{"type":"goal_difference","points":3}]',
+  'REGULAR_SEASON', 1, 1, 2, 2, null, null, null, null);
+
+select pg_temp.check(points = 10 and rules_hit = '{exact_score}', 'exact score does not add goal difference')
+from public.score_prediction('[{"type":"exact_score","points":10},{"type":"goal_difference","points":3}]',
+  'REGULAR_SEASON', 3, 1, 3, 1, null, null, null, null);
+
 -- Knockout: 1-1 in regular time, team 7 went through on penalties; the final counts double.
 select pg_temp.check(points = 34 and rules_hit = '{exact_score,advancing_team,penalties}',
   'final: (exact score 10 + advancing team 4 + penalties 3) x 2')
@@ -61,8 +73,23 @@ insert into auth.users (id, email, raw_user_meta_data) values
 
 select pg_temp.check((select nickname from public.profiles where id = '00000000-0000-0000-0000-00000000000a') = 'Alice',
   'profile created with the Google name');
+select pg_temp.check((select nickname from public.profiles where id = '00000000-0000-0000-0000-00000000000b') is null,
+  'email logins start without a name');
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('00000000-0000-0000-0000-00000000000d', 'other@example.com', '{"full_name":"alice "}');
+select pg_temp.check((select nickname from public.profiles where id = '00000000-0000-0000-0000-00000000000d') is null,
+  'a Google name already taken is not used');
+
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false);
+update public.profiles set nickname = 'bruno' where id = auth.uid();
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000c', false);
+select pg_temp.fails($$update public.profiles set nickname = ' BRUNO' where id = auth.uid()$$, 'names are unique, ignoring case and spaces');
+select pg_temp.fails($$update public.profiles set nickname = '  ' where id = auth.uid()$$, 'blank names are rejected');
+update public.profiles set nickname = 'carla' where id = auth.uid();
+reset role;
 select pg_temp.check((select nickname from public.profiles where id = '00000000-0000-0000-0000-00000000000b') = 'bruno',
-  'profile created with the email prefix');
+  'people pick their own name');
 
 insert into public.competitions (api_id, code, name, current_season) values (2013, 'BSA', 'Campeonato Brasileiro Série A', 2026);
 insert into public.teams (api_id, name, tla) values (1, 'Team A', 'TMA'), (2, 'Team B', 'TMB'), (3, 'Team C', 'TMC'), (4, 'Team D', 'TMD');
@@ -177,12 +204,28 @@ insert into public.question_answers (question_id, user_id, answer) values (1, au
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
 select pg_temp.check((select count(*) from public.question_answers) = 0, 'others answers hidden until the deadline');
 
--- The deadline passes and Alice sets the official answer.
+select pg_temp.fails($$insert into public.pool_questions (pool_id, kind, prompt, answer_count, points, closes_at)
+  values (current_setting('test.pool')::uuid, 'relegated', 'Again?', 4, 3, now() + interval '1 day')$$,
+  'one question of each kind per pool');
+insert into public.pool_questions (pool_id, kind, prompt, points, closes_at) values
+  (current_setting('test.pool')::uuid, 'free', 'First red card?', 2, now() + interval '1 day'),
+  (current_setting('test.pool')::uuid, 'free', 'Most corners?', 2, now() + interval '1 day');
+
+-- The deadline passes. The owner cannot answer the relegated question: the sync does.
 reset role;
 update public.pool_questions set closes_at = now() - interval '1 minute' where id = 1;
 set role authenticated;
 select pg_temp.check((select count(*) from public.question_answers) = 1, 'answers show after the deadline');
+select pg_temp.fails($$update public.pool_questions set official_answer = '["1"]' where id = 1$$,
+  'the owner cannot answer automatic questions');
+update public.pool_questions set official_answer = '["Someone"]' where prompt = 'First red card?';
+select pg_temp.check((select official_answer from public.pool_questions where prompt = 'First red card?') = '["Someone"]',
+  'the owner answers free questions');
+
+reset role;
+select pg_temp.check(not exists (select 1 from public.seasons_to_resolve()), 'season with matches left is not resolved');
 update public.pool_questions set official_answer = '["2","4","9","10"]' where id = 1;
+set role authenticated;
 
 select pg_temp.check((select total_points from public.pool_ranking where nickname = 'bruno') = 13,
   'two correct relegated teams add 6 points to the ranking');
@@ -233,7 +276,22 @@ select pg_temp.check((select max(computed_at)::text from public.prediction_score
   join public.predictions p on p.id = ps.prediction_id where p.match_id = 1) = current_setting('test.computed'),
   'rewriting the same score does not recompute points');
 
+-- Season over with an automatic question unanswered: the sync resolves it.
+insert into public.pool_questions (pool_id, kind, prompt, points, closes_at)
+values (current_setting('test.pool')::uuid, 'top_scorer', 'Top scorer?', 10, now() - interval '1 day');
+update public.matches set status = 'finished', home_score = 1, away_score = 0 where competition_id = 1;
+select pg_temp.check((select array_agg(code || ':' || season) from public.seasons_to_resolve()) = '{BSA:2026}',
+  'finished season with an open automatic question is resolved');
+insert into public.question_answers (question_id, user_id, answer)
+select id, '00000000-0000-0000-0000-00000000000b', '["Kevin  Viveros"]' from public.pool_questions where kind = 'top_scorer';
+update public.question_answers set answer = '[" kevin viveros"]';
+update public.pool_questions set official_answer = '["Kevin Viveros"]' where kind = 'top_scorer';
+select pg_temp.check((select qa.points from public.question_answers qa join public.pool_questions q on q.id = qa.question_id
+  where q.kind = 'top_scorer') = 10, 'text answers match ignoring case and outer spaces');
+select pg_temp.check(not exists (select 1 from public.seasons_to_resolve()), 'answered season is not resolved again');
+
 set role authenticated;
+select pg_temp.fails($$select public.seasons_to_resolve()$$, 'users cannot call seasons_to_resolve');
 select pg_temp.fails($$select public.competitions_due()$$, 'users cannot call competitions_due');
 select pg_temp.fails($$select public.squads_due()$$, 'users cannot call squads_due');
 select pg_temp.fails($$select public.unpaired_matches()$$, 'users cannot call unpaired_matches');

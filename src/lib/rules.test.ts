@@ -3,8 +3,8 @@ import test from 'node:test'
 import { buildRules, describeRules, isKnockoutStage, pointsOf, ruleOptionsFor } from './rules.ts'
 
 test('leagues only offer the per-match score rules', () => {
-  assert.deepEqual(ruleOptionsFor('LEAGUE').map((o) => o.type), ['exact_score', 'winner', 'one_team_goals'])
-  assert.equal(ruleOptionsFor('CUP').length, 5)
+  assert.deepEqual(ruleOptionsFor('LEAGUE').map((o) => o.type), ['exact_score', 'winner', 'goal_difference', 'one_team_goals'])
+  assert.equal(ruleOptionsFor('CUP').length, 6)
 })
 
 test('buildRules drops rules at zero and truncates decimals', () => {
