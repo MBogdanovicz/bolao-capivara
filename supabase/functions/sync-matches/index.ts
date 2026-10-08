@@ -14,9 +14,9 @@
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
 
 import { createClient } from '@supabase/supabase-js'
-import { type ApiStandingsResponse, type AutoKind, officialAnswer, tableOf, topScorersOf } from './bonus.ts'
+import { type ApiStandingsResponse, type AutoKind, type EspnStatisticsResponse, officialAnswer, tableOf, topScorersOf } from './bonus.ts'
 import {
-  ESPN_LEAGUES, ESPN_URL, type FdMatch, espnDate, eventsOf, pairTeams, rosterOf, teamLook,
+  ESPN_LEAGUES, type FdMatch, espnDate, espnGet, eventsOf, pairTeams, rosterOf, teamLook,
 } from './espn.ts'
 import {
   type ApiCompetitionListItem, type ApiMatchesResponse, competitionRow, mapStatus, matchResult, seasonOf, teamsOf,
@@ -200,8 +200,8 @@ async function resolveSeason(db: any, s: Season, standings: Response | null) {
   let scorers: string[] = []
   const league = ESPN_LEAGUES[s.code]
   if (league) {
-    const res = await fetch(`${ESPN_URL}/${league}/statistics?lang=pt&region=br`)
-    if (res.ok) scorers = topScorersOf(await res.json())
+    const res = await espnGet(`${league}/statistics`)
+    if (res.ok) scorers = topScorersOf(res.data as EspnStatisticsResponse)
   }
 
   const outcome = { table, champion: final?.advancing_team_id ?? null, scorers }
@@ -255,12 +255,12 @@ async function pairWithEspn(db: any): Promise<Record<string, unknown>[]> {
   const picked = [...days.values()].sort(() => Math.random() - 0.5).slice(0, ESPN_DAYS_PER_RUN)
   const results: Record<string, unknown>[] = []
   for (const day of picked) {
-    const res = await fetch(`${ESPN_URL}/${day.league}/scoreboard?lang=pt&region=br&dates=${day.date}`)
+    const res = await espnGet(`${day.league}/scoreboard?dates=${day.date}`)
     if (!res.ok) {
-      results.push({ espn: `${day.league}/${day.date}`, error: `ESPN responded ${res.status}` })
+      results.push({ espn: `${day.league}/${day.date}`, error: res.error })
       continue
     }
-    const pairs = pairTeams(day.matches, eventsOf(await res.json()))
+    const pairs = pairTeams(day.matches, eventsOf(res.data as Parameters<typeof eventsOf>[0]))
     let paired = 0
     for (const [teamId, espnTeam] of pairs) {
       const { error } = await db.from('teams').update(teamLook(espnTeam, day.league)).eq('id', teamId).is('espn_id', null)
@@ -275,9 +275,9 @@ async function pairWithEspn(db: any): Promise<Record<string, unknown>[]> {
 // (answers may name them) but lose the team.
 // deno-lint-ignore no-explicit-any
 async function saveSquad(db: any, team: { id: number; espn_id: string; espn_league: string }) {
-  const res = await fetch(`${ESPN_URL}/${team.espn_league}/teams/${team.espn_id}/roster?lang=pt&region=br`)
-  if (!res.ok) return { error: `ESPN responded ${res.status}` }
-  const players = rosterOf(await res.json())
+  const res = await espnGet(`${team.espn_league}/teams/${team.espn_id}/roster`)
+  if (!res.ok) return { error: res.error }
+  const players = rosterOf(res.data as Parameters<typeof rosterOf>[0])
 
   if (players.length > 0) {
     const { error } = await db.from('players').upsert(players.map((p) => ({ ...p, team_id: team.id })), { onConflict: 'espn_id' })

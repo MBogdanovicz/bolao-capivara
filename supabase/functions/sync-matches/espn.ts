@@ -10,6 +10,26 @@
 
 export const ESPN_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer'
 
+// ESPN answers 403 to requests that do not look like they come from a
+// browser (Deno's default User-Agent, for instance), so send browser headers.
+const ESPN_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+  'Accept': 'application/json, text/plain, */*',
+  'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
+  'Referer': 'https://www.espn.com.br/',
+  'Origin': 'https://www.espn.com.br',
+}
+
+// GET {ESPN_URL}/{path} in Portuguese. On failure, the error names the status
+// and the start of the body, which says who refused the request.
+export async function espnGet(path: string): Promise<{ ok: true; data: unknown } | { ok: false; error: string }> {
+  const sep = path.includes('?') ? '&' : '?'
+  const res = await fetch(`${ESPN_URL}/${path}${sep}lang=pt&region=br`, { headers: ESPN_HEADERS })
+  if (res.ok) return { ok: true, data: await res.json() }
+  const body = (await res.text()).replace(/\s+/g, ' ').slice(0, 160)
+  return { ok: false, error: `ESPN responded ${res.status}: ${body}` }
+}
+
 // football-data.org competition code -> ESPN league slug.
 export const ESPN_LEAGUES: Record<string, string> = {
   BSA: 'bra.1',
