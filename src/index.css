@@ -1,14 +1,29 @@
+@import '@fontsource/saira/600.css';
+@import '@fontsource/saira/700.css';
+
+/* Colors of the Capivara Esporte Clube crest: black and bright green.
+   --brand is the crest green, used on black or as a fill under black text;
+   --brand-ink is a darker step of it that reads as text on light surfaces. */
 :root {
-  --green: #1f6f43;
-  --green-dark: #155232;
-  --text: #1b1f1d;
-  --muted: #5b6560;
-  --bg: #ffffff;
-  --surface: #f2f5f3;
+  --brand: #00ff00;
+  --brand-ink: #087021;
+  --on-brand: #000000;
+  --ink: #000000;
+  --text: #111411;
+  --muted: #5d665f;
+  --bg: #f4f6f4;
+  --card: #ffffff;
+  --surface: #eceff0;
+  --border: #dde2dd;
   --danger: #b3261e;
-  --chart-focus: #1f6f43;
+  --highlight: rgb(0 255 0 / 0.14);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 2px 8px rgb(0 0 0 / 0.04);
+  --seg-active-bg: #000000;
+  --seg-active-fg: #00ff00;
+  --chart-focus: #087021;
   --chart-other: #b9c1bc;
   --chart-grid: #e3e8e5;
+  --display: 'Saira', system-ui, sans-serif;
   font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   color: var(--text);
   background: var(--bg);
@@ -17,12 +32,19 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #e8ece9;
-    --muted: #a3ada7;
-    --bg: #121514;
-    --surface: #1d2220;
+    --brand-ink: #00ff00;
+    --text: #eef2ee;
+    --muted: #9aa59c;
+    --bg: #050605;
+    --card: #111411;
+    --surface: #1b1f1b;
+    --border: #262b26;
     --danger: #f2b8b5;
-    --chart-focus: #3fa872;
+    --highlight: rgb(0 255 0 / 0.12);
+    --shadow: none;
+    --seg-active-bg: #00ff00;
+    --seg-active-fg: #000000;
+    --chart-focus: #2bd94a;
     --chart-other: #4a544f;
     --chart-grid: #2a302d;
   }
@@ -32,125 +54,151 @@
 
 body {
   margin: 0;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  min-height: 100vh;
+  background: var(--bg);
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
+
+/* Black top bar with the crest, on every logged-in screen. */
+.brandbar {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(8px + env(safe-area-inset-top)) 16px 8px;
+  background: var(--ink); color: #fff;
+  border-bottom: 2px solid var(--brand);
+  text-decoration: none;
+}
+.brandbar img { width: 36px; height: 36px; }
+.wordmark { font-family: var(--display); font-weight: 700; font-size: 1.15rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.wordmark span { color: var(--brand); }
 
 .page { max-width: 640px; margin: 0 auto; padding: 16px; }
 .narrow { max-width: 400px; }
 .center { text-align: center; margin-top: 40vh; }
-.bar { display: flex; align-items: center; justify-content: space-between; }
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+h1, h2, legend, .tabs a, .segmented button { font-family: var(--display); }
+h1 { margin: 8px 0 4px; font-size: 1.75rem; font-weight: 700; line-height: 1.15; letter-spacing: 0.01em; }
+h3 { margin: 0; font-size: 1.05rem; }
+a { color: var(--brand-ink); }
+.hint { color: var(--muted); font-size: 0.9rem; }
+small { display: block; color: var(--muted); font-weight: 400; font-size: 0.85rem; }
 
 form { display: flex; flex-direction: column; gap: 12px; }
-label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; }
+label { display: flex; flex-direction: column; gap: 6px; font-weight: 600; }
 
-input, textarea {
+input, textarea, select {
   font: inherit;
   font-size: 16px; /* prevents iOS auto-zoom */
   padding: 12px;
-  border: 1px solid var(--muted);
-  border-radius: 8px;
-  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
   color: var(--text);
 }
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--brand-ink); outline-offset: 0; border-color: transparent; }
+textarea { resize: vertical; }
 
 button, .button {
   font: inherit;
-  font-weight: 600;
+  font-weight: 700;
   display: block;
   width: 100%;
-  padding: 12px;
+  padding: 13px;
   border: none;
-  border-radius: 8px;
-  background: var(--green);
-  color: #fff;
+  border-radius: 10px;
+  background: var(--brand);
+  color: var(--on-brand);
   text-align: center;
   text-decoration: none;
   cursor: pointer;
+  transition: filter 0.15s;
 }
-button:disabled { opacity: 0.6; }
+button:active, .button:active { filter: brightness(0.9); }
+button:disabled { opacity: 0.5; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--brand-ink); outline-offset: 2px; }
 button.secondary { background: var(--surface); color: var(--text); }
-button.link { background: none; color: var(--green); width: auto; padding: 8px 0; }
+button.link { background: none; color: var(--brand-ink); width: auto; padding: 8px 0; font-weight: 600; }
 .hint button.link { display: inline; padding: 0; font-size: inherit; }
 
-.divider { text-align: center; color: var(--muted); }
+.divider { display: flex; align-items: center; gap: 12px; color: var(--muted); }
+.divider::before, .divider::after { content: ''; flex: 1; border-top: 1px solid var(--border); }
 .error { color: var(--danger); }
 
-.list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.list a { display: block; padding: 16px; border-radius: 8px; background: var(--surface); color: var(--text); text-decoration: none; }
+.list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.list a {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 16px 40px 16px 16px; position: relative;
+  border-radius: 14px; background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow);
+  color: var(--text); text-decoration: none; font-weight: 600; font-size: 1.05rem;
+}
+.list a::after { content: '›'; position: absolute; right: 16px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 1.5rem; font-weight: 400; }
 
-h1 { margin: 8px 0 4px; }
-h3 { margin: 0; font-size: 1.05rem; }
-a { color: var(--green); }
-.hint { color: var(--muted); font-size: 0.9rem; }
-textarea { resize: vertical; }
-.description { white-space: pre-wrap; background: var(--surface); border-radius: 8px; padding: 12px; margin: 8px 0; }
+.description { white-space: pre-wrap; background: var(--card); border: 1px solid var(--border); border-left: 4px solid var(--brand); border-radius: 10px; padding: 12px; margin: 8px 0; }
 button.chip:disabled { opacity: 0.4; }
 .center-text { text-align: center; }
-small { display: block; color: var(--muted); font-weight: 400; font-size: 0.85rem; }
-
-select {
-  font: inherit;
-  font-size: 16px;
-  padding: 12px;
-  border: 1px solid var(--muted);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text);
-}
 
 fieldset { border: none; padding: 0; margin: 8px 0 0; display: flex; flex-direction: column; gap: 10px; }
-legend { font-weight: 700; font-size: 1.1rem; margin-bottom: 4px; }
+legend { font-weight: 700; font-size: 1.15rem; margin-bottom: 4px; }
 label.row { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
 input.points { width: 80px; text-align: center; }
 label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 
-.card { background: var(--surface); border-radius: 12px; padding: 16px; margin: 12px 0; display: flex; flex-direction: column; gap: 10px; }
+.card { background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 14px; padding: 16px; margin: 12px 0; display: flex; flex-direction: column; gap: 10px; }
 .card p { margin: 0; }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
-button.chip { width: auto; padding: 8px 12px; background: var(--surface); color: var(--text); border: 1px solid var(--muted); border-radius: 999px; font-weight: 500; }
+button.chip { width: auto; padding: 8px 12px; background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 999px; font-weight: 500; }
 button.danger, .danger { color: var(--danger); }
 .invite { word-break: break-all; font-family: ui-monospace, monospace; }
 .checks { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow-y: auto; }
 
-.tabs { display: flex; gap: 4px; margin: 16px 0; border-bottom: 1px solid var(--surface); }
-.tabs a { flex: 1; text-align: center; padding: 10px; color: var(--muted); text-decoration: none; font-weight: 600; border-bottom: 3px solid transparent; }
-.tabs a.active { color: var(--green); border-bottom-color: var(--green); }
+.tabs { display: flex; gap: 4px; margin: 16px 0; border-bottom: 1px solid var(--border); }
+.tabs a { flex: 1; text-align: center; padding: 10px; color: var(--muted); text-decoration: none; font-weight: 600; font-size: 1.05rem; border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.tabs a.active { color: var(--text); border-bottom-color: var(--brand-ink); }
 
-.segmented { display: flex; gap: 4px; padding: 4px; margin-bottom: 12px; background: var(--surface); border-radius: 10px; }
-.segmented button { flex: 1; padding: 8px; background: transparent; color: var(--muted); font-weight: 600; }
-.segmented button.active { background: var(--bg); color: var(--text); }
+.segmented { display: flex; gap: 4px; padding: 4px; margin-bottom: 12px; background: var(--surface); border-radius: 12px; }
+.segmented button { flex: 1; padding: 8px 4px; background: transparent; color: var(--muted); font-weight: 600; border-radius: 9px; }
+.segmented button.active { background: var(--seg-active-bg); color: var(--seg-active-fg); }
 .stepper { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.stepper strong { font-family: var(--display); font-size: 1.1rem; }
 .stepper button { width: 48px; }
 
 .matches { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.match { background: var(--surface); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.match { background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 14px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .match-meta { display: flex; gap: 8px; color: var(--muted); font-size: 0.85rem; text-transform: capitalize; }
 .live { color: var(--danger); font-weight: 700; text-transform: none; }
 .match-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
 .team { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; font-weight: 600; font-size: 0.95rem; text-align: center; overflow-wrap: anywhere; }
 .crest { width: 28px; height: 28px; object-fit: contain; flex-shrink: 0; display: inline-block; }
-.score { font-size: 1.3rem; font-weight: 700; min-width: 64px; text-align: center; }
+.score { font-family: var(--display); font-size: 1.4rem; font-weight: 700; min-width: 64px; text-align: center; }
 .score-inputs { display: flex; align-items: center; gap: 6px; }
-.score-inputs input { width: 48px; text-align: center; padding: 10px 4px; }
+.score-inputs input { width: 48px; text-align: center; padding: 10px 4px; font-weight: 700; }
 .knockout { display: flex; flex-direction: column; gap: 8px; }
 .match-foot { display: flex; flex-direction: column; gap: 4px; font-size: 0.95rem; }
-.points-badge { margin-left: 8px; color: var(--green); }
+.points-badge { margin-left: 8px; color: var(--brand-ink); }
 .others { list-style: none; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 4px; }
 .others li { display: flex; justify-content: space-between; gap: 8px; font-size: 0.9rem; }
 
-.sticky-save { position: sticky; bottom: 0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: var(--bg); }
+.sticky-save { position: sticky; bottom: 0; padding: 12px 0 calc(12px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, var(--bg) 30%); }
+
+/* Login: the crest over a black hero. */
+.hero { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: calc(40px + env(safe-area-inset-top)) 16px 32px; background: var(--ink); color: #fff; border-bottom: 3px solid var(--brand); text-align: center; }
+.hero img { width: 140px; height: 140px; }
+.hero .wordmark { font-size: 1.6rem; }
+.hero p { margin: 0; color: #c7cfc8; }
 
 .ranking { width: 100%; border-collapse: collapse; }
-.ranking th, .ranking td { padding: 10px 6px; text-align: center; border-bottom: 1px solid var(--surface); }
+.ranking th, .ranking td { padding: 10px 6px; text-align: center; border-bottom: 1px solid var(--border); }
 .ranking th { color: var(--muted); font-size: 0.85rem; font-weight: 600; }
 .ranking .name { text-align: left; }
-.ranking td.name { display: flex; align-items: center; gap: 8px; }
-.ranking tr.me { background: var(--surface); }
+.ranking .who { display: flex; align-items: center; gap: 8px; }
+.ranking tr.me { background: var(--highlight); }
+.ranking td:first-child { font-family: var(--display); font-weight: 700; }
 .avatar { width: 24px; height: 24px; border-radius: 50%; }
 
 .actions { display: flex; gap: 16px; }
-.list small.pending { margin-top: 4px; color: var(--green); font-weight: 600; }
+.list small.pending { margin-top: 2px; color: var(--brand-ink); font-weight: 600; }
 .steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 .members { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
 .members li { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; }
@@ -174,7 +222,8 @@ button.secondary.danger { color: var(--danger); }
 .chart .dot { fill: var(--chart-focus); stroke: var(--bg); stroke-width: 2; }
 .chart .end-label { fill: var(--text); font-size: 13px; font-weight: 700; }
 .tooltip { position: absolute; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center;
-  padding: 6px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--chart-grid); font-size: 0.85rem;
+  padding: 6px 10px; border-radius: 8px; background: var(--card); border: 1px solid var(--chart-grid); font-size: 0.85rem;
   pointer-events: none; white-space: nowrap; box-shadow: 0 2px 8px rgb(0 0 0 / 0.12); }
 .pick { flex-direction: row; align-items: center; gap: 8px; font-weight: 600; }
 .pick select { flex: 1; }
+.bar a { text-decoration: none; font-weight: 600; }
