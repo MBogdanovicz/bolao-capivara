@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { monthLabel, periodsIn, rankPeriod, type PeriodPoints } from '../../lib/ranking'
-import { rankingImage, shareImage } from '../../lib/rankingImage'
+import { copyImage, rankingImage, shareImage } from '../../lib/rankingImage'
 import { supabase } from '../../lib/supabase'
 import { usePool } from './context'
 import Evolution from './Evolution'
@@ -32,6 +32,7 @@ export default function Ranking() {
   const [matchday, setMatchday] = useState<number | null>(null)
   const [month, setMonth] = useState<string | null>(null)
   const [sharing, setSharing] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     supabase
@@ -71,9 +72,11 @@ export default function Ranking() {
   async function share() {
     const period = view === 'round' ? `Rodada ${round}` : view === 'month' ? monthLabel(currentMonth!) : 'Ranking geral'
     setSharing(true)
+    setCopied(false)
     try {
-      const image = await rankingImage(pool.name, period, rows.map((r) => ({ ...r, points: r.total_points })), userId)
-      await shareImage(image, `${pool.name} · ${period}`)
+      const image = rankingImage(pool.name, period, rows.map((r) => ({ ...r, points: r.total_points })), userId)
+      void copyImage(image).then(setCopied)
+      await shareImage(await image, `${pool.name} · ${period}`)
     } finally {
       setSharing(false)
     }
@@ -135,6 +138,7 @@ export default function Ranking() {
           {sharing ? 'Gerando imagem…' : 'Compartilhar imagem do ranking'}
         </button>
       )}
+      {copied && <p className="hint">Imagem copiada também: é só colar na conversa.</p>}
       {view !== 'evolution' && <p className="hint">
         Desempate: mais placares exatos, depois mais vencedores certos. Os pontos entram quando o jogo termina.
         {view !== 'overall' && ' Por rodada e por mês contam só os jogos; os bônus entram no ranking geral.'}

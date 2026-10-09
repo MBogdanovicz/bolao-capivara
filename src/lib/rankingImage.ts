@@ -8,7 +8,7 @@ export type ImageEntry = (ImageRow & { me: boolean }) | 'gap'
 
 // The rows to draw: the first `top`, then a gap and the user when they are
 // below that.
-export function imageEntries(rows: ImageRow[], userId: string, top = 5): ImageEntry[] {
+export function imageEntries(rows: ImageRow[], userId: string, top = 10): ImageEntry[] {
   const entries: ImageEntry[] = rows.slice(0, top).map((r) => ({ ...r, me: r.user_id === userId }))
   const mine = rows.findIndex((r) => r.user_id === userId)
   if (mine >= top) {
@@ -45,9 +45,9 @@ export async function rankingImage(poolName: string, period: string, rows: Image
   const crest = await loadImage('/crest.png')
 
   const entries = imageEntries(rows, userId)
-  const rowH = 118
+  const rowH = 104
   // Tall enough for the rows; at least square, which chat apps preview well.
-  const listH = entries.reduce((h, e) => h + (e === 'gap' ? 64 : rowH), 0)
+  const listH = entries.reduce((h, e) => h + (e === 'gap' ? 56 : rowH), 0)
   const H = Math.max(W, PAD + 380 + listH + 120)
 
   const canvas = document.createElement('canvas')
@@ -81,9 +81,9 @@ export async function rankingImage(poolName: string, period: string, rows: Image
       ctx.fillStyle = COLORS.muted
       ctx.font = `700 40px ${BODY}`
       ctx.textAlign = 'center'
-      ctx.fillText('···', W / 2, y + 40)
+      ctx.fillText('···', W / 2, y + 34)
       ctx.textAlign = 'left'
-      y += 64
+      y += 56
       continue
     }
     ctx.fillStyle = e.me ? '#1d2a21' : COLORS.card
@@ -120,6 +120,20 @@ export async function rankingImage(poolName: string, period: string, rows: Image
   ctx.fillText('bolao.capivaraec.com', W / 2, H - PAD + 8)
 
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob'))), 'image/png'))
+}
+
+// Copies the image to the clipboard, so it can be pasted into apps the share
+// sheet does not list (WhatsApp on a Mac). Must be called before any await in
+// the click handler: Safari only allows it during the user's gesture, and takes
+// the image as a promise for that reason.
+export async function copyImage(image: Promise<Blob>): Promise<boolean> {
+  if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) return false
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': image })])
+    return true
+  } catch {
+    return false
+  }
 }
 
 // Opens the share sheet with the image, or downloads it where files cannot be
