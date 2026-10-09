@@ -122,6 +122,20 @@ export async function rankingImage(poolName: string, period: string, rows: Image
   return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('toBlob'))), 'image/png'))
 }
 
+// Copies the image to the clipboard, so it can be pasted into apps the share
+// sheet does not list (WhatsApp on a Mac). Must be called before any await in
+// the click handler: Safari only allows it during the user's gesture, and takes
+// the image as a promise for that reason.
+export async function copyImage(image: Promise<Blob>): Promise<boolean> {
+  if (typeof ClipboardItem === 'undefined' || !navigator.clipboard?.write) return false
+  try {
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': image })])
+    return true
+  } catch {
+    return false
+  }
+}
+
 // Opens the share sheet with the image, or downloads it where files cannot be
 // shared (desktop browsers).
 export async function shareImage(blob: Blob, title: string): Promise<void> {
