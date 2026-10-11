@@ -3,7 +3,9 @@ import { Link, useNavigate } from 'react-router'
 import { useAuth } from '../auth/context'
 import { COMPETITION_SELECT, competitionLabel, offeredCompetitions, type Competition } from '../lib/competitions'
 import { firstOpenMatchday } from '../lib/matches'
+import PixFields from '../components/PixFields'
 import { QuestionFields, type QuestionForm } from '../components/QuestionFields'
+import { pixColumns, pixForm } from '../lib/pix'
 import { QUESTION_TEMPLATES, canAddKind, toLocalInput, validateDraft } from '../lib/questions'
 import { buildRules, ruleOptionsFor, type PointsRuleType } from '../lib/rules'
 import { supabase } from '../lib/supabase'
@@ -23,6 +25,7 @@ export default function CreatePool() {
   const [points, setPoints] = useState<Partial<Record<PointsRuleType, number>>>({})
   const [questions, setQuestions] = useState<QuestionForm[]>([])
   const [withCapivara, setWithCapivara] = useState(true)
+  const [pix, setPix] = useState(() => pixForm(null, null))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -86,6 +89,8 @@ export default function CreatePool() {
     if (!competition || !session) return
     const rules = buildRules(points, ruleOptions)
     if (rules.length === 0) return setError('Defina pontos para pelo menos uma regra.')
+    const payment = pixColumns(pix)
+    if ('error' in payment) return setError(payment.error)
     for (const q of questions) {
       const problem = validateDraft(q) ?? (q.closesAt ? null : 'Defina o prazo de cada palpite bônus.')
       if (problem) return setError(problem)
@@ -104,6 +109,7 @@ export default function CreatePool() {
         scoring_rules: rules,
         first_matchday: firstMatchday,
         with_capivara: withCapivara,
+        ...payment,
       })
       .select('id')
       .single()
@@ -156,6 +162,8 @@ export default function CreatePool() {
             <textarea maxLength={1000} rows={3} value={description} onChange={(e) => setDescription(e.target.value)}
               placeholder="Ex.: R$ 20 para participar, pix para fulano. O primeiro leva 70%." />
           </label>
+
+          <PixFields value={pix} onChange={(patch) => setPix({ ...pix, ...patch })} />
 
           <label>
             Campeonato

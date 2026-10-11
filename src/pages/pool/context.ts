@@ -11,10 +11,24 @@ export type Pool = {
   first_matchday: number | null
   scoring_rules: Rule[]
   description: string | null
+  entry_fee: number | null
+  pix_key: string | null
   competition: { name: string; type: string; current_season: number | null; season_label: string | null } | null
 }
 
-export type Member = { user_id: string; role: 'owner' | 'member'; nickname: string; avatar_url: string | null }
+export type Member = {
+  user_id: string
+  role: 'owner' | 'member'
+  nickname: string
+  avatar_url: string | null
+  paid_at: string | null
+  payment_reported_at: string | null
+}
+
+// Whether the member still has to pay the pool's entry fee.
+export function owesFee(pool: Pick<Pool, 'entry_fee'>, member: Member): boolean {
+  return pool.entry_fee !== null && member.role === 'member' && member.paid_at === null
+}
 
 export type PoolContext = {
   pool: Pool

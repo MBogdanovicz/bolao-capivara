@@ -501,3 +501,47 @@ delete from public.pool_members where user_id = public.capivara_id();
 reset role;
 select pg_temp.check(not exists (select 1 from public.pool_members where user_id = public.capivara_id()), 'the owner can remove the Capivara');
 \echo 'capivara ok'
+
+-- ---------------------------------------------------------------------------
+-- 14. Entry fee by Pix
+-- ---------------------------------------------------------------------------
+set role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select pg_temp.fails($$insert into public.pools (name, competition_id, season, owner_id, scoring_rules, entry_fee)
+  values ('Sem chave', 1, 2026, auth.uid(), '[{"type":"exact_score","points":10}]', 20)$$, 'a fee needs a Pix key');
+insert into public.pools (name, competition_id, season, owner_id, scoring_rules, entry_fee, pix_key, with_capivara)
+values ('Pago', 1, 2026, auth.uid(), '[{"type":"exact_score","points":10}]', 20, 'alice@example.com', true);
+select set_config('test.paid_pool', (select id::text from public.pools where name = 'Pago'), false);
+select set_config('test.paid_invite', (select invite_code from public.pools where name = 'Pago'), false);
+select pg_temp.check((select bool_and(paid_at is not null) from public.pool_members where pool_id = current_setting('test.paid_pool')::uuid),
+  'the owner and the Capivara never owe the fee');
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000b', false);
+select pg_temp.check((public.pool_preview(current_setting('test.paid_invite')) ->> 'entry_fee')::numeric = 20, 'the invite shows the fee');
+select public.join_pool(current_setting('test.paid_invite'));
+select pg_temp.check((select paid_at is null and payment_reported_at is null from public.pool_members
+  where pool_id = current_setting('test.paid_pool')::uuid and user_id = auth.uid()), 'a new member owes the fee');
+select pg_temp.check((select pix_key from public.pools where id = current_setting('test.paid_pool')::uuid) = 'alice@example.com',
+  'members read the Pix key');
+insert into public.predictions (pool_id, user_id, match_id, home_score, away_score)
+values (current_setting('test.paid_pool')::uuid, auth.uid(), (select id from public.matches where api_id = 204), 2, 0);
+select pg_temp.check((select count(*) from public.predictions where pool_id = current_setting('test.paid_pool')::uuid) = 1,
+  'members predict before paying');
+select public.report_payment(current_setting('test.paid_pool')::uuid);
+select pg_temp.check((select payment_reported_at is not null and paid_at is null from public.pool_members
+  where pool_id = current_setting('test.paid_pool')::uuid and user_id = auth.uid()), 'a member reports the payment');
+select pg_temp.fails($$select public.confirm_payment(current_setting('test.paid_pool')::uuid, auth.uid())$$,
+  'members cannot confirm their own payment');
+update public.pool_members set paid_at = now() where user_id = auth.uid();
+select pg_temp.check((select paid_at is null from public.pool_members
+  where pool_id = current_setting('test.paid_pool')::uuid and user_id = auth.uid()), 'members cannot mark themselves as paid');
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-00000000000a', false);
+select public.confirm_payment(current_setting('test.paid_pool')::uuid, '00000000-0000-0000-0000-00000000000b');
+select pg_temp.check((select paid_at is not null from public.pool_members
+  where pool_id = current_setting('test.paid_pool')::uuid and user_id = '00000000-0000-0000-0000-00000000000b'), 'the owner confirms a payment');
+select public.confirm_payment(current_setting('test.paid_pool')::uuid, '00000000-0000-0000-0000-00000000000b', false);
+select pg_temp.check((select paid_at is null from public.pool_members
+  where pool_id = current_setting('test.paid_pool')::uuid and user_id = '00000000-0000-0000-0000-00000000000b'), 'the owner undoes a confirmation');
+reset role;
+\echo 'entry fee ok'

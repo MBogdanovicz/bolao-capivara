@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router'
 import RulesSummary, { type QuestionSummary } from '../components/RulesSummary'
 import { seasonLabel } from '../lib/competitions'
+import { formatMoney } from '../lib/pix'
 import type { Rule } from '../lib/rules'
 import { supabase } from '../lib/supabase'
 
@@ -9,6 +10,7 @@ type Preview = {
   id: string
   name: string
   description: string | null
+  entry_fee: number | null
   season: number
   first_matchday: number | null
   scoring_rules: Rule[]
@@ -64,6 +66,11 @@ export default function JoinPool() {
         {preview.first_matchday ? ` · desde a rodada ${preview.first_matchday}` : ''} · {people}
       </p>
       {preview.description && <p className="description">{preview.description}</p>}
+      {preview.entry_fee !== null && (
+        <p className="description">
+          Entrada de {formatMoney(preview.entry_fee)} por Pix para {preview.owner ?? 'o dono do bolão'}. Você paga depois de entrar e já pode palpitar enquanto o pagamento não é confirmado.
+        </p>
+      )}
 
       <section className="card">
         <RulesSummary rules={preview.scoring_rules} questions={preview.questions} />

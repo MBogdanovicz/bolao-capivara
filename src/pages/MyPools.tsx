@@ -7,10 +7,17 @@ import { formatKickoff } from '../lib/matches'
 import { saveNickname } from '../lib/profile'
 import { supabase } from '../lib/supabase'
 
-type PoolRow = { id: string; name: string }
+type PoolRow = {
+  id: string
+  name: string
+  owner_id: string
+  entry_fee: number | null
+  pool_members: { user_id: string; role: string; paid_at: string | null }[]
+}
 type Pending = { pool_id: string; missing: number; next_kickoff: string }
 
 export default function MyPools() {
+  const { session } = useAuth()
   const [pools, setPools] = useState<PoolRow[] | null>(null)
   const [pending, setPending] = useState<Record<string, Pending>>({})
 
@@ -18,9 +25,9 @@ export default function MyPools() {
     // RLS only returns the pools the user is a member of.
     supabase
       .from('pools')
-      .select('id, name')
+      .select('id, name, owner_id, entry_fee, pool_members(user_id, role, paid_at)')
       .order('created_at', { ascending: false })
-      .then(({ data }) => setPools(data ?? []))
+      .then(({ data }) => setPools((data ?? []) as PoolRow[]))
     supabase
       .rpc('my_pending_predictions')
       .then(({ data }) => setPending(Object.fromEntries(((data ?? []) as Pending[]).map((p) => [p.pool_id, p]))))
@@ -42,6 +49,7 @@ export default function MyPools() {
       <ul className="list">
         {pools?.map((pool) => {
           const p = pending[pool.id]
+          const payment = paymentLine(pool, session?.user.id)
           return (
             <li key={pool.id}>
               <Link to={`/bolao/${pool.id}`}>
@@ -51,6 +59,7 @@ export default function MyPools() {
                     {p.missing === 1 ? 'Falta 1 palpite' : `Faltam ${p.missing} palpites`} · próximo jogo {formatKickoff(p.next_kickoff)}
                   </small>
                 )}
+                {payment && <small className="pending">{payment}</small>}
               </Link>
             </li>
           )
@@ -60,6 +69,17 @@ export default function MyPools() {
       <Link className="button" to="/bolao/novo">Criar bolão</Link>
     </main>
   )
+}
+
+// Entry fee reminders: what the user owes, or what the owner has to confirm.
+function paymentLine(pool: PoolRow, userId: string | undefined): string | null {
+  if (pool.entry_fee === null || !userId) return null
+  const unpaid = pool.pool_members.filter((m) => m.role === 'member' && m.paid_at === null)
+  if (pool.owner_id === userId) {
+    if (unpaid.length === 0) return null
+    return unpaid.length === 1 ? '1 pagamento a confirmar' : `${unpaid.length} pagamentos a confirmar`
+  }
+  return unpaid.some((m) => m.user_id === userId) ? 'Pagamento da entrada pendente' : null
 }
 
 // "Você é X · Alterar": the user's name, editable in place.

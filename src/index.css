@@ -266,3 +266,8 @@ button.step { width: 48px; height: 32px; padding: 0; background: var(--surface);
 .others .points-badge { margin-left: 0; }
 .points-badge.partial { color: var(--muted); font-style: italic; }
 .points-badge.zero { color: var(--muted); }
+.payment { border-left: 4px solid var(--accent); }
+.pix-qr { width: 100%; max-width: 240px; align-self: center; border-radius: 8px; }
+.paid-tag { color: var(--brand-ink); }
+.unpaid-tag { color: var(--danger); }
+.member-actions { display: flex; gap: 12px; flex-shrink: 0; }

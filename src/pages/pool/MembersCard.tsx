@@ -10,13 +10,15 @@ type Props = {
   members: Member[]
   userId: string
   isOwner: boolean
+  hasFee: boolean
   onRemoved: (userId: string) => void
+  onPaymentChanged: (userId: string, paidAt: string | null) => void
 }
 
 // Who is in the pool. The owner removes members or deletes the whole pool;
 // members leave. Predictions and bonus answers of whoever leaves are deleted
-// with the membership.
-export default function MembersCard({ poolId, poolName, members, userId, isOwner, onRemoved }: Props) {
+// with the membership. With an entry fee, the owner confirms who paid.
+export default function MembersCard({ poolId, poolName, members, userId, isOwner, hasFee, onRemoved, onPaymentChanged }: Props) {
   const navigate = useNavigate()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -34,6 +36,16 @@ export default function MembersCard({ poolId, poolName, members, userId, isOwner
     if (error || !data?.length) return setError('Não foi possível. Tente de novo.')
     if (self) navigate('/', { replace: true })
     else onRemoved(member.user_id)
+  }
+
+  async function setPaid(member: Member, paid: boolean) {
+    if (!paid && !window.confirm(`Desfazer a confirmação do pagamento de ${member.nickname}?`)) return
+    setBusy(true)
+    setError(null)
+    const { error } = await supabase.rpc('confirm_payment', { p_pool_id: poolId, p_user_id: member.user_id, p_paid: paid })
+    setBusy(false)
+    if (error) return setError('Não foi possível. Tente de novo.')
+    onPaymentChanged(member.user_id, paid ? new Date().toISOString() : null)
   }
 
   async function deletePool() {
@@ -60,9 +72,17 @@ export default function MembersCard({ poolId, poolName, members, userId, isOwner
               {m.user_id === userId && <small>você</small>}
               {m.role === 'owner' && <small>dono</small>}
               {m.user_id === CAPIVARA_ID && <small>automática</small>}
+              {hasFee && m.role === 'member' && m.user_id !== CAPIVARA_ID && <PaymentTag member={m} />}
             </span>
             {isOwner && m.role === 'member' && (
-              <button type="button" className="link danger" disabled={busy} onClick={() => remove(m)}>Remover</button>
+              <span className="member-actions">
+                {hasFee && m.user_id !== CAPIVARA_ID && (
+                  m.paid_at === null
+                    ? <button type="button" className="link" disabled={busy} onClick={() => setPaid(m, true)}>Confirmar</button>
+                    : <button type="button" className="link" disabled={busy} onClick={() => setPaid(m, false)}>Desfazer</button>
+                )}
+                <button type="button" className="link danger" disabled={busy} onClick={() => remove(m)}>Remover</button>
+              </span>
             )}
           </li>
         ))}
@@ -76,4 +96,9 @@ export default function MembersCard({ poolId, poolName, members, userId, isOwner
       {error && <p className="error">{error}</p>}
     </section>
   )
+}
+
+function PaymentTag({ member }: { member: Member }) {
+  if (member.paid_at !== null) return <small className="paid-tag">pagou</small>
+  return <small className="unpaid-tag">{member.payment_reported_at !== null ? 'diz que pagou' : 'não pagou'}</small>
 }
