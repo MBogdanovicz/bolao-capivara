@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { type EspnTeam, type FdMatch, espnDate, eventsOf, pairTeams, rosterOf, similarity, teamLook } from './espn.ts'
+import { type EspnTeam, type FdMatch, espnDate, eventsOf, finalScoresOf, pairTeams, rosterOf, similarity, teamLook } from './espn.ts'
 
 const espn = (id: string, displayName: string, abbreviation: string, shortDisplayName = displayName): EspnTeam =>
   ({ id, displayName, shortDisplayName, abbreviation, logo: `https://a.espncdn.com/${id}.png` })
@@ -64,4 +64,21 @@ test('scoreboard events and rosters are parsed, and ESPN supplies the look', () 
 test('scoreboard days are US Eastern days', () => {
   assert.equal(espnDate('2026-10-11T22:30:00Z'), '20261011')
   assert.equal(espnDate('2026-10-12T00:30:00Z'), '20261011')
+})
+
+test('final scores come only from games that are over', () => {
+  const game = (name: string, state: string, completed: boolean, home: string | null, away: string | null) => ({
+    date: '2026-10-17T21:00Z',
+    competitions: [{
+      status: { type: { name, state, completed } },
+      competitors: [{ homeAway: 'home' as const, team: FLA, score: home }, { homeAway: 'away' as const, team: FLU, score: away }],
+    }],
+  })
+  assert.deepEqual(finalScoresOf({ events: [
+    game('STATUS_FULL_TIME', 'post', true, '1', '0'),
+    game('STATUS_SECOND_HALF', 'in', false, '2', '2'),
+    game('STATUS_ABANDONED', 'post', true, '0', '0'),
+    game('STATUS_POSTPONED', 'post', true, '0', '0'),
+    game('STATUS_FULL_TIME', 'post', true, null, '0'),
+  ] }), [{ home_id: '819', away_id: '3445', home_score: 1, away_score: 0 }])
 })

@@ -5,14 +5,16 @@
 //   2. fetches the matches of each competition that is due (competitions_due():
 //      a match in progress, or over 6 hours since the last fetch), at most
 //      MAX_REQUESTS football-data.org calls in all;
-//   3. pairs new teams with ESPN teams through a few days of fixtures;
-//   4. fetches from ESPN the squads that are due (squads_due());
-//   5. when a season ends, answers its automatic bonus questions (champion,
+//   3. takes from ESPN the final score of league games that should be over but
+//      football-data.org still has unfinished (it sometimes misses a few);
+//   4. pairs new teams with ESPN teams through a few days of fixtures;
+//   5. fetches from ESPN the squads that are due (squads_due());
+//   6. when a season ends, answers its automatic bonus questions (champion,
 //      top N, relegated, top scorer; see bonus.ts);
-//   6. sends prediction reminders by push notification (push.ts), creating
+//   7. sends prediction reminders by push notification (push.ts), creating
 //      the VAPID key pair on the first run;
-//   7. sends the end-of-round summary of each pool (summaries.ts);
-//   8. makes the Capivara's predictions for the next 2 days (capivara.ts).
+//   8. sends the end-of-round summary of each pool (summaries.ts);
+//   9. makes the Capivara's predictions for the next 2 days (capivara.ts).
 //
 // Secrets (Edge Functions > Secrets): FOOTBALL_DATA_API_KEY and CRON_SECRET.
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided by Supabase.
@@ -20,14 +22,14 @@
 import { createClient } from '@supabase/supabase-js'
 import { type ApiStandingsResponse, type AutoKind, type EspnStatisticsResponse, officialAnswer, tableOf, topScorersOf } from './bonus.ts'
 import {
-  ESPN_LEAGUES, type FdMatch, espnDate, espnGet, eventsOf, pairTeams, rosterOf, teamLook,
+  ESPN_LEAGUES, type FdMatch, espnDate, espnGet, eventsOf, finalScoresOf, pairTeams, rosterOf, teamLook,
 } from './espn.ts'
 import { type EcKeys, type Notice, type Subscription, generateKeys, sendPush } from './push.ts'
 import { type ReminderRow, reminderNotices } from './reminders.ts'
 import { type SummaryRow, summaryNotices } from './summaries.ts'
 import { type Fixture, type Result, guess } from './capivara.ts'
 import {
-  type ApiCompetitionListItem, type ApiMatchesResponse, competitionRow, mapStatus, matchResult, seasonOf, teamsOf,
+  NON_KNOCKOUT_STAGES, type ApiCompetitionListItem, type ApiMatchesResponse, competitionRow, mapStatus, matchResult, seasonOf, teamsOf,
 } from './mapping.ts'
 
 const API_URL = 'https://api.football-data.org/v4'
@@ -35,6 +37,9 @@ const API_URL = 'https://api.football-data.org/v4'
 const MAX_REQUESTS = 8
 // ESPN has no published limit; keep each run small anyway.
 const ESPN_DAYS_PER_RUN = 3
+// A league game is taken from ESPN once football-data.org is this late with it.
+const ESPN_RESULT_AFTER_MS = 2 * 3600_000
+const ESPN_RESULT_DAYS_BACK = 10
 const ESPN_SQUADS_PER_RUN = 10
 const LIST_EVERY_MS = 24 * 3600_000
 // Who the push services contact about our notifications (VAPID "sub").
@@ -104,17 +109,20 @@ Deno.serve(async (req) => {
     results.push({ code, ...(await save(db, (await res.json()) as ApiMatchesResponse)) })
   }
 
-  // 3. Pair teams with ESPN, a few match days per run.
+  // 3. Final scores football-data.org is late with, from ESPN.
+  results.push(...(await resultsFromEspn(db)))
+
+  // 4. Pair teams with ESPN, a few match days per run.
   results.push(...(await pairWithEspn(db)))
 
-  // 4. Squads from ESPN.
+  // 5. Squads from ESPN.
   const { data: squads, error: squadErr } = await db.rpc('squads_due').limit(ESPN_SQUADS_PER_RUN)
   if (squadErr) return json({ error: squadErr.message }, 500)
   for (const t of squads as { id: number; espn_id: string; espn_league: string }[]) {
     results.push({ team: t.id, ...(await saveSquad(db, t)) })
   }
 
-  // 5. Bonus questions of seasons that just ended.
+  // 6. Bonus questions of seasons that just ended.
   const { data: seasons, error: seasonErr } = await db.rpc('seasons_to_resolve')
   if (seasonErr) return json({ error: seasonErr.message }, 500)
   for (const s of seasons as Season[]) {
@@ -123,7 +131,7 @@ Deno.serve(async (req) => {
     results.push({ resolve: `${s.code}/${s.season}`, ...(await resolveSeason(db, s, standings)) })
   }
 
-  // 6. Prediction reminders and 7. round summaries.
+  // 7. Prediction reminders and 8. round summaries.
   const vapid = await vapidKeys(db)
   if ('error' in vapid) results.push({ step: 'push', error: vapid.error })
   else {
@@ -131,7 +139,7 @@ Deno.serve(async (req) => {
     results.push(...(await sendSummaries(db, vapid)))
   }
 
-  // 8. The Capivara's predictions.
+  // 9. The Capivara's predictions.
   results.push(...(await capivaraPredictions(db)))
 
   const failed = results.some((r) => 'error' in r)
@@ -191,7 +199,16 @@ async function save(db: any, data: ApiMatchesResponse) {
     }
   })
 
-  const { error: matchErr } = await db.from('matches').upsert(rows, { onConflict: 'api_id' })
+  // A game already finished (with ESPN's score) stays as it is while
+  // football-data.org still has it unfinished.
+  const unfinished = rows.filter((r) => r.status !== 'finished').map((r) => r.api_id)
+  const { data: done, error: doneErr } = unfinished.length
+    ? await db.from('matches').select('api_id').eq('status', 'finished').in('api_id', unfinished)
+    : { data: [], error: null }
+  if (doneErr) return { error: doneErr.message }
+  const keep = new Set((done as { api_id: number }[]).map((m) => m.api_id))
+
+  const { error: matchErr } = await db.from('matches').upsert(rows.filter((r) => !keep.has(r.api_id)), { onConflict: 'api_id' })
   if (matchErr) return { error: matchErr.message }
   await db.from('competitions').update({ synced_at: new Date().toISOString() }).eq('id', competition.id)
   return { season, teams: teamId.size, matches: rows.length }
@@ -243,6 +260,70 @@ async function resolveSeason(db: any, s: Season, standings: Response | null) {
     if (!error) answered++
   }
   return { answered, open: questions.length - answered }
+}
+
+type LateRow = {
+  id: number; kickoff_at: string; stage: string; home_team_id: number; away_team_id: number
+  competitions: { code: string }
+}
+
+// League games that kicked off over ESPN_RESULT_AFTER_MS ago and that
+// football-data.org still has unfinished get ESPN's final score, a few match
+// days per run. Knockout games are left to football-data.org, which tells
+// regular time from extra time and who went through.
+// deno-lint-ignore no-explicit-any
+async function resultsFromEspn(db: any): Promise<Record<string, unknown>[]> {
+  const now = Date.now()
+  const { data, error } = await db
+    .from('matches')
+    .select('id, kickoff_at, stage, home_team_id, away_team_id, competitions!inner(code)')
+    .in('status', ['scheduled', 'in_play', 'paused'])
+    .lt('kickoff_at', new Date(now - ESPN_RESULT_AFTER_MS).toISOString())
+    .gt('kickoff_at', new Date(now - ESPN_RESULT_DAYS_BACK * 24 * 3600_000).toISOString())
+    .in('stage', [...NON_KNOCKOUT_STAGES])
+    .not('home_team_id', 'is', null)
+    .not('away_team_id', 'is', null)
+  if (error) return [{ step: 'espn results', error: error.message }]
+  const late = (data as LateRow[]).filter((m) => ESPN_LEAGUES[m.competitions.code])
+  if (late.length === 0) return []
+
+  const teamIds = [...new Set(late.flatMap((m) => [m.home_team_id, m.away_team_id]))]
+  const { data: teams, error: teamErr } = await db.from('teams').select('id, espn_id').in('id', teamIds).not('espn_id', 'is', null)
+  if (teamErr) return [{ step: 'espn results', error: teamErr.message }]
+  const espnId = new Map<number, string>((teams as { id: number; espn_id: string }[]).map((t) => [t.id, t.espn_id]))
+
+  const days = new Map<string, { league: string; date: string; matches: LateRow[] }>()
+  for (const m of late) {
+    if (!espnId.has(m.home_team_id) || !espnId.has(m.away_team_id)) continue
+    const league = ESPN_LEAGUES[m.competitions.code]
+    const date = espnDate(m.kickoff_at)
+    const day = days.get(`${league}/${date}`) ?? { league, date, matches: [] }
+    day.matches.push(m)
+    days.set(`${league}/${date}`, day)
+  }
+
+  const results: Record<string, unknown>[] = []
+  for (const day of [...days.values()].slice(0, ESPN_DAYS_PER_RUN)) {
+    const res = await espnGet(`${day.league}/scoreboard?dates=${day.date}`)
+    if (!res.ok) {
+      results.push({ espn: `${day.league}/${day.date}`, error: res.error })
+      continue
+    }
+    const scores = finalScoresOf(res.data as Parameters<typeof finalScoresOf>[0])
+    let filled = 0
+    for (const m of day.matches) {
+      const s = scores.find((x) => x.home_id === espnId.get(m.home_team_id) && x.away_id === espnId.get(m.away_team_id))
+      if (!s) continue
+      const { error } = await db
+        .from('matches')
+        .update({ status: 'finished', home_score: s.home_score, away_score: s.away_score })
+        .eq('id', m.id)
+        .neq('status', 'finished')
+      if (!error) filled++
+    }
+    results.push({ espn: `${day.league}/${day.date}`, results: filled, late: day.matches.length })
+  }
+  return results
 }
 
 type UnpairedRow = {
