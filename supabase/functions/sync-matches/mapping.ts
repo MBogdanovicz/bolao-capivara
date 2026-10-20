@@ -60,7 +60,7 @@ const STATUS: Record<string, MatchStatus> = {
 }
 
 // Stages with no "advancing team" (league and group stages).
-const NON_KNOCKOUT_STAGES = new Set([
+export const NON_KNOCKOUT_STAGES = new Set([
   'REGULAR_SEASON', 'GROUP_STAGE', 'CLAUSURA', 'APERTURA', 'CHAMPIONSHIP_ROUND', 'RELEGATION_ROUND',
 ])
 

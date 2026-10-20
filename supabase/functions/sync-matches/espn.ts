@@ -1,6 +1,7 @@
 // ESPN's public site API (unofficial, no key) gives team names in Portuguese,
 // current crests and squads. football-data.org stays the source of fixtures,
-// rounds and results; ESPN only supplies how teams look.
+// rounds and results; ESPN supplies how teams look, and the final score of
+// league games football-data.org has not updated (finalScoresOf).
 //
 // Teams are matched through fixtures: a football-data match and an ESPN event
 // with the same kickoff are the same game, so their home teams are the same
@@ -56,10 +57,16 @@ export type EspnTeam = {
 
 export type EspnEvent = { date: string; home: EspnTeam; away: EspnTeam }
 
+type EspnStatus = { type?: { name?: string | null; state?: string | null; completed?: boolean | null } | null }
+
 type ScoreboardResponse = {
   events?: {
     date: string
-    competitions?: { competitors?: { homeAway: 'home' | 'away'; team: EspnTeam }[] }[]
+    status?: EspnStatus | null
+    competitions?: {
+      status?: EspnStatus | null
+      competitors?: { homeAway: 'home' | 'away'; team: EspnTeam; score?: string | number | null }[]
+    }[]
   }[]
 }
 
@@ -70,6 +77,27 @@ export function eventsOf(response: ScoreboardResponse): EspnEvent[] {
     const home = competitors.find((c) => c.homeAway === 'home')?.team
     const away = competitors.find((c) => c.homeAway === 'away')?.team
     if (home?.id && away?.id) out.push({ date: e.date, home, away })
+  }
+  return out
+}
+
+export type EspnFinalScore = { home_id: string; away_id: string; home_score: number; away_score: number }
+
+// Games of a scoreboard that are over, with their final score. Games called
+// off, abandoned or forfeited are left out, even when ESPN marks them done.
+export function finalScoresOf(response: ScoreboardResponse): EspnFinalScore[] {
+  const out: EspnFinalScore[] = []
+  for (const e of response.events ?? []) {
+    const c = e.competitions?.[0]
+    const status = (c?.status ?? e.status)?.type
+    if (!status?.completed || status.state !== 'post' || /ABANDON|CANCEL|POSTPON|FORFEIT|SUSPEND/.test(status.name ?? '')) continue
+    const home = c?.competitors?.find((x) => x.homeAway === 'home')
+    const away = c?.competitors?.find((x) => x.homeAway === 'away')
+    const homeScore = Number(home?.score)
+    const awayScore = Number(away?.score)
+    if (!home?.team?.id || !away?.team?.id || home.score == null || away.score == null) continue
+    if (!Number.isInteger(homeScore) || !Number.isInteger(awayScore) || homeScore < 0 || awayScore < 0) continue
+    out.push({ home_id: home.team.id, away_id: away.team.id, home_score: homeScore, away_score: awayScore })
   }
   return out
 }
